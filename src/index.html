@@ -1,0 +1,1104 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cloudflare 多账户管理系统</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html, body { background-color: #0F172A; }
+    html.light, html.light body { background-color: #F8FAFC; }
+  </style>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            cf: {
+              orange: '#F48120',
+              blue: '#0055FF',
+              dark: '#0F172A',
+              card: '#1E293B',
+              'card-light': '#FFFFFF',
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'Segoe UI', 'Microsoft YaHei', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="dark bg-slate-50 text-slate-900 dark:bg-cf-dark dark:text-slate-100 overflow-hidden h-screen select-none">
+
+  <!-- 启动加载画面，避免启动时白屏/内容闪烁 -->
+  <div id="splash-screen" class="fixed inset-0 z-[100] bg-[#0F172A] flex flex-col items-center justify-center">
+    <div class="w-16 h-16 rounded-xl bg-gradient-to-br from-cf-orange to-cf-blue flex items-center justify-center text-white font-bold text-2xl shadow-2xl shadow-cf-orange/30 animate-pulse mb-6">CF</div>
+    <div class="text-slate-200 font-semibold text-lg tracking-wide">Cloudflare 多账户管理系统</div>
+    <div class="text-slate-500 text-sm mt-2">正在加载...</div>
+  </div>
+
+  <div class="fixed left-3 right-3 bottom-3 top-3 flex gap-3 z-0">
+    <!-- 侧边栏 -->
+    <aside id="sidebar" class="w-64 glass flex flex-col rounded-3xl transition-all duration-300 ease-in-out relative shadow-xl shadow-black/5 border border-white/10 dark:border-white/10 light:border-black/5 h-full overflow-hidden">
+      <!-- 侧边栏头部：应用标题与常用操作 -->
+      <div class="p-4 border-b border-white/5 dark:border-white/5">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3 app-title">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-cf-orange to-cf-blue flex items-center justify-center text-white font-bold text-sm shrink-0">CF</div>
+            <div class="app-title-text flex flex-col min-w-0">
+              <span class="font-semibold text-sm tracking-wide truncate">Cloudflare</span>
+              <span class="text-xs text-slate-400 truncate">多账户管理</span>
+            </div>
+          </div>
+          <div class="sidebar-actions flex items-center gap-1 shrink-0">
+            <button onclick="openUsage()" class="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-slate-500 dark:text-slate-400 hover:text-cf-orange dark:hover:text-cf-orange" title="使用说明">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </button>
+            <button onclick="toggleTheme()" class="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-slate-500 dark:text-slate-400 hover:text-cf-orange dark:hover:text-cf-orange" title="切换主题">
+              <svg id="theme-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-4">
+        <div class="flex items-center justify-between mb-3">
+          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider px-3 menu-label">当前账户</div>
+          <button onclick="toggleSidebar()" class="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-slate-400 hover:text-cf-orange shrink-0" title="折叠侧边栏">
+            <svg id="sidebar-toggle-icon" class="w-4 h-4 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"></path></svg>
+          </button>
+        </div>
+        <div class="account-card flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-cf-orange/10 to-cf-blue/5 border border-cf-orange/10 cursor-pointer hover:from-cf-orange/15 transition-all">
+          <div class="account-avatar w-10 h-10 rounded-full bg-cf-orange/20 flex items-center justify-center text-cf-orange font-bold shrink-0 transition-all">-</div>
+          <div class="account-info flex-1 min-w-0">
+            <div class="text-sm font-medium truncate">未选择账户</div>
+            <div class="text-xs text-slate-400 truncate">点击右上角添加账户</div>
+          </div>
+          <div class="account-status account-info w-2 h-2 rounded-full bg-slate-500 status-dot shrink-0"></div>
+        </div>
+      </div>
+
+      <nav class="flex-1 min-h-0 px-3 space-y-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
+        <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-3 mt-2 menu-label">菜单</div>
+        <a href="#" onclick="showPage('dashboard')" id="nav-dashboard" class="nav-item active flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium">
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+          <span class="nav-text whitespace-nowrap">仪表盘</span>
+        </a>
+        <a href="#" onclick="showPage('accounts')" id="nav-accounts" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 dark:text-slate-400">
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+          <span class="nav-text whitespace-nowrap">账户管理</span>
+        </a>
+        <a href="#" onclick="showPage('zones')" id="nav-zones" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 dark:text-slate-400">
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path></svg>
+          <span class="nav-text whitespace-nowrap">域名列表</span>
+        </a>
+        <a href="#" onclick="showPage('dns')" id="nav-dns" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 dark:text-slate-400">
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+          <span class="nav-text whitespace-nowrap">DNS 管理</span>
+        </a>
+        <a href="#" onclick="showPage('workers')" id="nav-workers" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 dark:text-slate-400">
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+          <span class="nav-text whitespace-nowrap">Workers</span>
+        </a>
+        <a href="#" onclick="showPage('pages')" id="nav-pages" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 dark:text-slate-400">
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+          <span class="nav-text whitespace-nowrap">Pages</span>
+        </a>
+        <a href="#" onclick="showPage('r2')" id="nav-r2" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 dark:text-slate-400">
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg>
+          <span class="nav-text whitespace-nowrap">R2 存储</span>
+        </a>
+        <a href="#" onclick="showPage('kvd1')" id="nav-kvd1" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 dark:text-slate-400">
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg>
+          <span class="nav-text whitespace-nowrap">KV / D1</span>
+        </a>
+        <a href="#" onclick="showPage('tunnels')" id="nav-tunnels" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 dark:text-slate-400">
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+          <span class="nav-text whitespace-nowrap">Tunnels</span>
+        </a>
+        <a href="#" onclick="showPage('firewall')" id="nav-firewall" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 dark:text-slate-400">
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+          <span class="nav-text whitespace-nowrap">Firewall</span>
+        </a>
+        <a href="#" onclick="showPage('cache')" id="nav-cache" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 dark:text-slate-400">
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+          <span class="nav-text whitespace-nowrap">缓存</span>
+        </a>
+        <a href="#" onclick="showPage('analytics')" id="nav-analytics" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 dark:text-slate-400">
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+          <span class="nav-text whitespace-nowrap">分析报表</span>
+        </a>
+        <a href="#" onclick="showPage('settings')" id="nav-settings" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 dark:text-slate-400">
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+          <span class="nav-text whitespace-nowrap">设置</span>
+        </a>
+      </nav>
+
+      <div class="p-4 border-t border-white/5 dark:border-white/5">
+        <div class="flex items-center justify-center gap-3 text-xs text-slate-500 cursor-pointer hover:text-slate-400 transition-colors" onclick="refreshApiStatus()" title="点击刷新连接状态">
+          <div id="api-status-dot" class="w-2 h-2 rounded-full bg-slate-500"></div>
+          <span id="api-status-text" class="api-status-text whitespace-nowrap">未选择账户</span>
+        </div>
+        <div class="mt-3 flex items-center justify-between px-1 text-[10px] text-slate-500">
+          <span title="当前版本">v<span id="app-version">0.2.0</span></span>
+          <a href="https://github.com/Anji-318/cloudflare-manager/tree/main" target="_blank" class="hover:text-cf-orange transition-colors flex items-center gap-1" title="打开开源仓库">
+            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.373 0 0 5.373 0 12c0 5.303 3.438 9.8 8.205 11.387.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.09-.745.083-.73.083-.73 1.205.085 1.84 1.237 1.84 1.237 1.07 1.835 2.807 1.305 3.492.998.108-.776.42-1.305.763-1.605-2.665-.305-5.467-1.333-5.467-5.93 0-1.31.468-2.382 1.235-3.22-.123-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.3 1.23A11.51 11.51 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.29-1.552 3.297-1.23 3.297-1.23.653 1.653.241 2.874.118 3.176.77.838 1.233 1.91 1.233 3.22 0 4.61-2.807 5.625-5.48 5.92.43.372.815 1.103.815 2.222 0 1.606-.015 2.898-.015 3.293 0 .32.218.694.825.576C20.565 21.795 24 17.298 24 12c0-6.627-5.373-12-12-12z"/></svg>
+            <span>开源仓库</span>
+          </a>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 主内容区 -->
+    <main class="flex-1 glass rounded-3xl shadow-xl shadow-black/5 border border-white/10 dark:border-white/10 light:border-black/5 h-full overflow-hidden">
+      <div class="h-full overflow-y-auto custom-scrollbar p-6">
+      
+      <!-- 仪表盘 -->
+      <div id="page-dashboard" class="page-section fade-in">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h1 class="text-2xl font-bold">仪表盘</h1>
+            <p class="text-sm text-slate-500 mt-1">欢迎回来，今日所有账户运行正常</p>
+          </div>
+          <button onclick="openAddAccount()" class="px-4 py-2 rounded-xl bg-cf-orange hover:bg-orange-600 text-white text-sm font-medium transition-colors flex items-center gap-2 shadow-lg shadow-cf-orange/25">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+            添加账户
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div class="card glass rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-slate-400 text-sm">账户总数</span>
+              <div class="w-8 h-8 rounded-lg bg-cf-blue/10 text-cf-blue flex items-center justify-center"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg></div>
+            </div>
+            <div id="dash-account-count" class="text-3xl font-bold">-</div>
+            <div class="text-xs text-green-500 mt-1">已加载</div>
+          </div>
+          <div class="card glass rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-slate-400 text-sm">域名总数</span>
+              <div class="w-8 h-8 rounded-lg bg-cf-orange/10 text-cf-orange flex items-center justify-center"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path></svg></div>
+            </div>
+            <div id="dash-zone-count" class="text-3xl font-bold">-</div>
+            <div class="text-xs text-slate-400 mt-1">当前账户</div>
+          </div>
+          <div class="card glass rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-slate-400 text-sm">当前 DNS 记录</span>
+              <div class="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg></div>
+            </div>
+            <div id="dash-dns-count" class="text-3xl font-bold">-</div>
+            <div class="text-xs text-slate-400 mt-1">当前域名</div>
+          </div>
+          <div class="card glass rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-slate-400 text-sm">今日请求</span>
+              <div class="w-8 h-8 rounded-lg bg-green-500/10 text-green-500 flex items-center justify-center"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg></div>
+            </div>
+            <div id="dash-req-count" class="text-3xl font-bold">-</div>
+            <div class="text-xs text-slate-400 mt-1">当前域名</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="glass rounded-2xl p-5">
+            <h3 class="font-semibold mb-4">当前账户</h3>
+            <div id="dash-current-account" class="text-sm text-slate-400">未选择账户</div>
+          </div>
+          <div class="glass rounded-2xl p-5">
+            <h3 class="font-semibold mb-4">当前域名</h3>
+            <div id="dash-current-zone" class="text-sm text-slate-400">未选择域名</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 账户管理 -->
+      <div id="page-accounts" class="page-section hidden fade-in">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h1 class="text-2xl font-bold">账户管理</h1>
+            <p class="text-sm text-slate-500 mt-1">管理你的 Cloudflare API Token</p>
+          </div>
+          <button onclick="openAddAccount()" class="px-4 py-2 rounded-xl bg-cf-orange hover:bg-orange-600 text-white text-sm font-medium transition-colors shadow-lg shadow-cf-orange/25">+ 添加账户</button>
+        </div>
+        <div class="glass rounded-2xl overflow-hidden">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-100/50 dark:bg-slate-800/50 text-slate-500">
+              <tr>
+                <th class="text-left px-5 py-3 font-medium">账户名称</th>
+                <th class="text-left px-5 py-3 font-medium">邮箱 / 描述</th>
+                <th class="text-left px-5 py-3 font-medium">Token 状态</th>
+                <th class="text-left px-5 py-3 font-medium">域名数</th>
+                <th class="text-left px-5 py-3 font-medium">操作</th>
+              </tr>
+            </thead>
+            <tbody id="accounts-tbody" class="divide-y divide-slate-200 dark:divide-slate-700/50">
+              <!-- Accounts will be rendered here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 域名列表 -->
+      <div id="page-zones" class="page-section hidden fade-in">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h1 class="text-2xl font-bold">域名列表</h1>
+            <p class="text-sm text-slate-500 mt-1">管理所有账户下的域名</p>
+          </div>
+          <div class="flex gap-2">
+            <input id="zone-search" type="text" placeholder="搜索域名..." class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange w-64">
+            <button onclick="loadZones()" class="px-4 py-2 rounded-xl bg-cf-orange hover:bg-orange-600 text-white text-sm font-medium transition-colors">刷新</button>
+          </div>
+        </div>
+        <div class="glass rounded-2xl overflow-hidden">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-100/50 dark:bg-slate-800/50 text-slate-500">
+              <tr>
+                <th class="text-left px-5 py-3 font-medium">域名</th>
+                <th class="text-left px-5 py-3 font-medium">账户</th>
+                <th class="text-left px-5 py-3 font-medium">状态</th>
+                <th class="text-left px-5 py-3 font-medium">Plan</th>
+                <th class="text-left px-5 py-3 font-medium">名称服务器</th>
+                <th class="text-left px-5 py-3 font-medium">操作</th>
+              </tr>
+            </thead>
+            <tbody id="zones-tbody" class="divide-y divide-slate-200 dark:divide-slate-700/50">
+              <!-- Zones will be rendered here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- DNS 管理 -->
+      <div id="page-dns" class="page-section hidden fade-in">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <div class="flex items-center gap-3">
+              <h1 class="text-2xl font-bold">DNS 管理</h1>
+              <span id="dns-zone-name" class="text-sm px-3 py-1 rounded-full bg-cf-blue/10 text-cf-blue">未选择域名</span>
+            </div>
+            <p class="text-sm text-slate-500 mt-1">添加、编辑、删除 DNS 记录</p>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="loadDnsRecords()" class="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm transition-colors">刷新</button>
+            <button onclick="openDnsEditor()" class="px-4 py-2 rounded-xl bg-cf-orange hover:bg-orange-600 text-white text-sm font-medium transition-colors shadow-lg shadow-cf-orange/25">+ 添加记录</button>
+          </div>
+        </div>
+        <div class="glass rounded-2xl overflow-hidden">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-100/50 dark:bg-slate-800/50 text-slate-500">
+              <tr>
+                <th class="text-left px-5 py-3 font-medium">类型</th>
+                <th class="text-left px-5 py-3 font-medium">名称</th>
+                <th class="text-left px-5 py-3 font-medium">内容</th>
+                <th class="text-left px-5 py-3 font-medium">TTL</th>
+                <th class="text-left px-5 py-3 font-medium">代理</th>
+                <th class="text-left px-5 py-3 font-medium">操作</th>
+              </tr>
+            </thead>
+            <tbody id="dns-tbody" class="divide-y divide-slate-200 dark:divide-slate-700/50">
+              <!-- DNS records will be rendered here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 分析报表 -->
+      <div id="page-analytics" class="page-section hidden fade-in">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h1 class="text-2xl font-bold">分析报表</h1>
+            <p class="text-sm text-slate-500 mt-1">查看域名流量与威胁数据</p>
+          </div>
+          <select id="analytics-range" onchange="loadAnalytics()" class="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm px-4 py-2 outline-none">
+            <option value="86400">最近 24 小时</option>
+            <option value="604800">最近 7 天</option>
+            <option value="2592000">最近 30 天</option>
+          </select>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          <div class="card glass rounded-2xl p-5">
+            <div class="text-sm text-slate-400 mb-1">总请求数</div>
+            <div id="analytics-requests" class="text-3xl font-bold">-</div>
+          </div>
+          <div class="card glass rounded-2xl p-5">
+            <div class="text-sm text-slate-400 mb-1">威胁请求</div>
+            <div id="analytics-threats" class="text-3xl font-bold text-cf-orange">-</div>
+          </div>
+          <div class="card glass rounded-2xl p-5">
+            <div class="text-sm text-slate-400 mb-1">缓存命中率</div>
+            <div id="analytics-cache" class="text-3xl font-bold text-green-500">-</div>
+          </div>
+        </div>
+        <div class="glass rounded-2xl p-5">
+          <h3 class="font-semibold mb-4">请求来源地区</h3>
+          <div id="analytics-countries" class="space-y-3">
+            <div class="text-sm text-slate-500">请先选择一个域名</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Workers -->
+      <div id="page-workers" class="page-section hidden fade-in">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h1 class="text-2xl font-bold">Cloudflare Workers</h1>
+            <p class="text-sm text-slate-500 mt-1">部署和管理 Serverless 脚本</p>
+          </div>
+          <button onclick="createWorker()" class="px-4 py-2 rounded-xl bg-cf-orange hover:bg-orange-600 text-white text-sm font-medium transition-colors shadow-lg shadow-cf-orange/25">+ 部署 Worker</button>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div class="lg:col-span-2 glass rounded-2xl p-5">
+            <h3 class="font-semibold mb-4">Worker Scripts</h3>
+            <div id="workers-list" class="space-y-3">
+              <div class="p-8 text-center text-slate-500">暂无 Workers 脚本</div>
+            </div>
+          </div>
+          <div class="glass rounded-2xl p-5">
+            <h3 class="font-semibold mb-4">请求统计</h3>
+            <div class="space-y-4">
+              <div>
+                <div class="text-xs text-slate-500 mb-1">今日请求</div>
+                <div id="workers-requests" class="text-2xl font-bold">-</div>
+              </div>
+              <div>
+                <div class="text-xs text-slate-500 mb-1">状态</div>
+                <div class="text-2xl font-bold text-slate-400">正常</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pages -->
+      <div id="page-pages" class="page-section hidden fade-in">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h1 class="text-2xl font-bold">Cloudflare Pages</h1>
+            <p class="text-sm text-slate-500 mt-1">静态站点与 JAMstack 项目管理</p>
+          </div>
+          <button onclick="createPagesProject()" class="px-4 py-2 rounded-xl bg-cf-orange hover:bg-orange-600 text-white text-sm font-medium transition-colors shadow-lg shadow-cf-orange/25">+ 新建项目</button>
+        </div>
+        <div class="glass rounded-2xl overflow-hidden">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-100/50 dark:bg-slate-800/50 text-slate-500">
+              <tr>
+                <th class="text-left px-5 py-3 font-medium">项目名称</th>
+                <th class="text-left px-5 py-3 font-medium">生产分支</th>
+                <th class="text-left px-5 py-3 font-medium">最后部署</th>
+                <th class="text-left px-5 py-3 font-medium">状态</th>
+                <th class="text-left px-5 py-3 font-medium">操作</th>
+              </tr>
+            </thead>
+            <tbody id="pages-tbody" class="divide-y divide-slate-200 dark:divide-slate-700/50">
+              <!-- Pages will be rendered here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- R2 -->
+      <div id="page-r2" class="page-section hidden fade-in">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h1 class="text-2xl font-bold">R2 对象存储</h1>
+            <p class="text-sm text-slate-500 mt-1">管理存储桶与文件对象</p>
+          </div>
+          <button onclick="createR2Bucket()" class="px-4 py-2 rounded-xl bg-cf-orange hover:bg-orange-600 text-white text-sm font-medium transition-colors shadow-lg shadow-cf-orange/25">+ 创建 Bucket</button>
+        </div>
+        <div id="r2-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div class="col-span-full p-8 text-center text-slate-500">暂无 R2 Bucket</div>
+        </div>
+      </div>
+
+      <!-- KV / D1 -->
+      <div id="page-kvd1" class="page-section hidden fade-in">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h1 class="text-2xl font-bold">KV / D1</h1>
+            <p class="text-sm text-slate-500 mt-1">键值存储与 SQL 数据库管理</p>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="switchKvD1Tab('kv')" id="btn-tab-kv" class="px-4 py-2 rounded-xl bg-cf-orange text-white text-sm font-medium transition-colors shadow-lg shadow-cf-orange/25">KV</button>
+            <button onclick="switchKvD1Tab('d1')" id="btn-tab-d1" class="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm transition-colors">D1</button>
+          </div>
+        </div>
+
+        <!-- KV 视图 -->
+        <div id="kvd1-kv-view">
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="glass rounded-2xl p-5">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="font-semibold">KV 命名空间</h3>
+                <button onclick="createKvNamespace()" class="text-xs px-3 py-1.5 rounded-lg bg-cf-orange/10 text-cf-orange hover:bg-cf-orange/20">+ 新建</button>
+              </div>
+              <div id="kv-ns-list" class="space-y-2">
+                <div class="p-4 text-center text-slate-500 text-sm">暂无 KV 命名空间</div>
+              </div>
+            </div>
+            <div class="lg:col-span-2 glass rounded-2xl p-5 flex flex-col">
+              <div class="flex items-center justify-between mb-4">
+                <div>
+                  <h3 class="font-semibold">SESSIONS</h3>
+                  <p class="text-xs text-slate-500 mt-1">浏览、搜索、编辑键值对</p>
+                </div>
+                <div class="flex gap-2">
+                  <button onclick="importKvJson()" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">导入 JSON</button>
+                  <button onclick="openKvEditor('', '')" class="text-xs px-3 py-1.5 rounded-lg bg-cf-blue/10 text-cf-blue hover:bg-cf-blue/20">+ 添加键值</button>
+                </div>
+              </div>
+              <div class="flex gap-2 mb-4">
+                <input type="text" placeholder="搜索 key..." class="flex-1 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
+                <button class="px-4 py-2 rounded-xl bg-cf-orange hover:bg-orange-600 text-white text-sm font-medium">搜索</button>
+              </div>
+              <div class="flex-1 overflow-auto">
+                <table class="w-full text-sm">
+                  <thead class="bg-slate-100/50 dark:bg-slate-800/50 text-slate-500 sticky top-0">
+                    <tr>
+                      <th class="text-left px-4 py-2 font-medium">Key</th>
+                      <th class="text-left px-4 py-2 font-medium">Value 预览</th>
+                      <th class="text-left px-4 py-2 font-medium">TTL</th>
+                      <th class="text-left px-4 py-2 font-medium">大小</th>
+                      <th class="text-left px-4 py-2 font-medium">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="kv-keys-tbody" class="divide-y divide-slate-200 dark:divide-slate-700/50">
+                    <tr><td colspan="5" class="px-5 py-8 text-center text-slate-500">请选择一个命名空间</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="flex items-center justify-between mt-4 pt-4 border-t border-slate-200 dark:border-slate-700/50">
+                <span class="text-xs text-slate-500">显示 1-3 / 12,450 条</span>
+                <div class="flex gap-1">
+                  <button class="px-3 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs hover:bg-slate-100 dark:hover:bg-slate-800">上一页</button>
+                  <button class="px-3 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs hover:bg-slate-100 dark:hover:bg-slate-800">下一页</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- D1 视图 -->
+        <div id="kvd1-d1-view" class="hidden">
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="glass rounded-2xl p-5">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="font-semibold">D1 数据库</h3>
+                <button onclick="createD1Database()" class="text-xs px-3 py-1.5 rounded-lg bg-cf-orange/10 text-cf-orange hover:bg-cf-orange/20">+ 新建</button>
+              </div>
+              <div id="d1-db-list" class="space-y-2">
+                <div class="p-4 text-center text-slate-500 text-sm">暂无 D1 数据库</div>
+              </div>
+            </div>
+            <div class="lg:col-span-2 glass rounded-2xl p-5 flex flex-col">
+              <div class="flex items-center justify-between mb-4">
+                <div>
+                  <h3 class="font-semibold">main-db</h3>
+                  <p class="text-xs text-slate-500 mt-1">执行 SQL 查询、管理表与数据</p>
+                </div>
+                <div class="flex gap-2">
+                  <button onclick="switchD1SubTab('tables')" id="btn-d1-tab-tables" class="text-xs px-3 py-1.5 rounded-lg bg-cf-blue/10 text-cf-blue hover:bg-cf-blue/20">表结构</button>
+                  <button onclick="switchD1SubTab('query')" id="btn-d1-tab-query" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">SQL 查询</button>
+                  <button onclick="switchD1SubTab('data')" id="btn-d1-tab-data" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">数据浏览</button>
+                </div>
+              </div>
+
+              <!-- D1 表结构 -->
+              <div id="d1-view-tables" class="space-y-3">
+                <div class="p-8 text-center text-slate-500 text-sm">请选择一个数据库</div>
+              </div>
+              <!-- D1 SQL 查询 -->
+              <div id="d1-view-query" class="hidden flex-col h-full">
+                <textarea class="w-full h-32 p-4 rounded-xl bg-slate-900 text-green-400 font-mono text-xs border border-slate-700 outline-none focus:border-cf-orange mb-3" placeholder="SELECT * FROM users WHERE ...">SELECT * FROM users LIMIT 10;</textarea>
+                <div class="flex justify-between items-center mb-3">
+                  <span class="text-xs text-slate-500">支持 SELECT / INSERT / UPDATE / DELETE / CREATE TABLE</span>
+                  <button onclick="executeD1Query()" class="px-4 py-2 rounded-xl bg-cf-orange hover:bg-orange-600 text-white text-sm font-medium">执行查询</button>
+                </div>
+                <div id="d1-query-results" class="flex-1 overflow-auto rounded-xl bg-slate-100/30 dark:bg-slate-800/30 p-3">
+                  <div class="text-sm text-slate-500 text-center py-8">执行查询后显示结果</div>
+                </div>
+              </div>
+
+              <!-- D1 数据浏览 -->
+              <div id="d1-view-data" class="hidden flex-col h-full">
+                <div class="flex gap-2 mb-3">
+                  <select id="d1-data-table-select" onchange="loadD1TableData()" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none">
+                    <option value="">选择表</option>
+                  </select>
+                  <button onclick="addD1Row()" class="px-3 py-2 rounded-xl bg-cf-blue/10 text-cf-blue text-xs hover:bg-cf-blue/20">+ 添加行</button>
+                  <button onclick="refreshD1Data()" class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs hover:bg-slate-100 dark:hover:bg-slate-800">刷新</button>
+                </div>
+                <div class="flex-1 overflow-auto rounded-xl bg-slate-100/30 dark:bg-slate-800/30">
+                  <table class="w-full text-xs">
+                    <thead id="d1-data-thead" class="bg-slate-100/50 dark:bg-slate-800/50 text-slate-500 sticky top-0">
+                      <tr><th class="text-left px-3 py-2">操作</th></tr>
+                    </thead>
+                    <tbody id="d1-data-tbody" class="divide-y divide-slate-200 dark:divide-slate-700/50">
+                      <tr><td class="px-5 py-8 text-center text-slate-500">请选择一个数据库和表</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tunnels -->
+      <div id="page-tunnels" class="page-section hidden fade-in">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h1 class="text-2xl font-bold">Cloudflare Tunnels</h1>
+            <p class="text-sm text-slate-500 mt-1">Zero Trust 隧道管理</p>
+          </div>
+          <button class="px-4 py-2 rounded-xl bg-cf-orange hover:bg-orange-600 text-white text-sm font-medium transition-colors shadow-lg shadow-cf-orange/25">+ 创建 Tunnel</button>
+        </div>
+        <div class="glass rounded-2xl overflow-hidden">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-100/50 dark:bg-slate-800/50 text-slate-500">
+              <tr>
+                <th class="text-left px-5 py-3 font-medium">隧道名称</th>
+                <th class="text-left px-5 py-3 font-medium">连接器</th>
+                <th class="text-left px-5 py-3 font-medium">路由</th>
+                <th class="text-left px-5 py-3 font-medium">状态</th>
+                <th class="text-left px-5 py-3 font-medium">操作</th>
+              </tr>
+            </thead>
+            <tbody id="tunnels-tbody" class="divide-y divide-slate-200 dark:divide-slate-700/50">
+              <!-- Tunnels will be rendered here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Firewall -->
+      <div id="page-firewall" class="page-section hidden fade-in">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h1 class="text-2xl font-bold">Firewall & WAF</h1>
+            <p class="text-sm text-slate-500 mt-1">安全规则与威胁防护</p>
+          </div>
+          <button class="px-4 py-2 rounded-xl bg-cf-orange hover:bg-orange-600 text-white text-sm font-medium transition-colors shadow-lg shadow-cf-orange/25">+ 添加规则</button>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          <div class="card glass rounded-2xl p-5">
+            <div class="text-sm text-slate-400 mb-1">当前威胁数（24h）</div>
+            <div id="fw-threat-count" class="text-3xl font-bold text-cf-orange">-</div>
+          </div>
+          <div class="card glass rounded-2xl p-5">
+            <div class="text-sm text-slate-400 mb-1">防火墙规则</div>
+            <div id="fw-rule-count" class="text-3xl font-bold">-</div>
+          </div>
+          <div class="card glass rounded-2xl p-5">
+            <div class="text-sm text-slate-400 mb-1">IP 访问规则</div>
+            <div id="fw-ip-rule-count" class="text-3xl font-bold">-</div>
+          </div>
+        </div>
+        <div class="glass rounded-2xl overflow-hidden">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-100/50 dark:bg-slate-800/50 text-slate-500">
+              <tr>
+                <th class="text-left px-5 py-3 font-medium">规则名称</th>
+                <th class="text-left px-5 py-3 font-medium">类型</th>
+                <th class="text-left px-5 py-3 font-medium">动作</th>
+                <th class="text-left px-5 py-3 font-medium">状态</th>
+                <th class="text-left px-5 py-3 font-medium">操作</th>
+              </tr>
+            </thead>
+            <tbody id="firewall-tbody" class="divide-y divide-slate-200 dark:divide-slate-700/50">
+              <!-- Firewall rules will be rendered here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Cache -->
+      <div id="page-cache" class="page-section hidden fade-in">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h1 class="text-2xl font-bold">缓存与性能</h1>
+            <p class="text-sm text-slate-500 mt-1">清除缓存与优化配置</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <div class="glass rounded-2xl p-5">
+            <h3 class="font-semibold mb-4">清除缓存</h3>
+            <div class="space-y-3">
+              <button onclick="purgeCache()" class="w-full p-3 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 text-sm font-medium transition-colors text-left flex items-center justify-between">
+                <span>清除所有缓存</span>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+              </button>
+              <div class="flex gap-2">
+                <input type="text" placeholder="输入 URL 清除指定资源" class="flex-1 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
+                <button class="px-4 py-2.5 rounded-xl bg-cf-orange hover:bg-orange-600 text-white text-sm font-medium">清除</button>
+              </div>
+            </div>
+          </div>
+          <div class="glass rounded-2xl p-5">
+            <h3 class="font-semibold mb-4">性能开关</h3>
+            <div class="space-y-4">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="text-sm font-medium">Argo Smart Routing</div>
+                  <div class="text-xs text-slate-500">智能路由加速</div>
+                </div>
+                <button id="toggle-argo" onclick="toggleZoneSetting('argo_smart_routing')" class="w-10 h-5 rounded-full bg-slate-400 relative transition-colors"><div class="absolute left-1 top-1 w-3 h-3 rounded-full bg-white shadow transition-all"></div></button>
+              </div>
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="text-sm font-medium">Polish 图像优化</div>
+                  <div class="text-xs text-slate-500">自动压缩图像</div>
+                </div>
+                <button id="toggle-polish" onclick="toggleZoneSetting('polish')" class="w-10 h-5 rounded-full bg-slate-400 relative transition-colors"><div class="absolute left-1 top-1 w-3 h-3 rounded-full bg-white shadow transition-all"></div></button>
+              </div>
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="text-sm font-medium">Auto Minify</div>
+                  <div class="text-xs text-slate-500">压缩 HTML/CSS/JS</div>
+                </div>
+                <button id="toggle-minify" onclick="toggleZoneSetting('minify')" class="w-10 h-5 rounded-full bg-slate-400 relative transition-colors"><div class="absolute left-1 top-1 w-3 h-3 rounded-full bg-white shadow transition-all"></div></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 设置 -->
+      <div id="page-settings" class="page-section hidden fade-in">
+        <h1 class="text-2xl font-bold mb-6">设置</h1>
+        <div class="glass rounded-2xl p-6 max-w-2xl space-y-6">
+          <div class="flex items-center justify-between pb-6 border-b border-slate-200 dark:border-slate-700/50">
+            <div>
+              <h3 class="font-medium">深色模式</h3>
+              <p class="text-sm text-slate-500">切换应用的主题外观</p>
+            </div>
+            <button onclick="toggleTheme()" id="theme-toggle" class="relative inline-flex h-6 w-11 items-center rounded-full bg-cf-orange transition-colors">
+              <span class="translate-x-6 inline-block h-4 w-4 transform rounded-full bg-white transition-transform"></span>
+            </button>
+          </div>
+          <div class="flex items-center justify-between pb-6 border-b border-slate-200 dark:border-slate-700/50">
+            <div>
+              <h3 class="font-medium">语言</h3>
+              <p class="text-sm text-slate-500">选择界面语言</p>
+            </div>
+            <select class="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm px-3 py-2 outline-none">
+              <option>简体中文</option>
+              <option>English</option>
+            </select>
+          </div>
+          <div class="flex items-center justify-between pb-6 border-b border-slate-200 dark:border-slate-700/50">
+            <div>
+              <h3 class="font-medium">启动时锁定</h3>
+              <p class="text-sm text-slate-500">每次启动应用需要输入主密码</p>
+            </div>
+            <button class="relative inline-flex h-6 w-11 items-center rounded-full bg-slate-300 dark:bg-slate-700 transition-colors">
+              <span class="translate-x-1 inline-block h-4 w-4 transform rounded-full bg-white transition-transform"></span>
+            </button>
+          </div>
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="font-medium text-red-400">清除所有数据</h3>
+              <p class="text-sm text-slate-500">删除本地保存的所有账户和配置</p>
+            </div>
+            <button class="px-4 py-2 rounded-lg border border-red-400 text-red-400 hover:bg-red-400/10 text-sm transition-colors">清除</button>
+          </div>
+        </div>
+      </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- 添加账户弹窗 -->
+  <div id="modal-add-account" class="fixed inset-0 z-[60] hidden">
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeAddAccount()"></div>
+    <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-md">
+      <div class="glass rounded-2xl p-6 shadow-2xl">
+        <div class="flex items-center justify-between mb-5">
+          <h3 class="text-lg font-bold">添加 Cloudflare 账户</h3>
+          <button onclick="closeAddAccount()" class="text-slate-400 hover:text-slate-200"><svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        </div>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium mb-2">账户名称</label>
+            <input id="acc-name" type="text" placeholder="例如：Acme Corp" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-2">邮箱 / 备注</label>
+            <input id="acc-email" type="text" placeholder="admin@example.com" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-2">API Token</label>
+            <div class="relative">
+              <input id="acc-token" type="password" autocomplete="new-password" placeholder="输入 Cloudflare API Token" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-cf-orange pr-12">
+              <button type="button" id="token-toggle-btn" onclick="toggleTokenVisibility()" class="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-200/10 dark:hover:bg-slate-700/30 transition-colors"><svg id="token-toggle-icon" class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg></button>
+            </div>
+            <p class="text-xs text-slate-500 mt-2">Token 将使用系统级加密安全存储，不会以明文保存。</p>
+            <div class="mt-2 p-3 rounded-xl bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 text-xs text-slate-500">
+              <p class="mb-1">如需使用 <strong>Worker 路由/域名</strong> 或 <strong>Pages 自定义域名</strong>，请确保 Token 包含：</p>
+              <div class="flex flex-wrap gap-1">
+                <span class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">帐户 - Workers 脚本 编辑</span>
+                <span class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">区域 - Workers 路由 编辑</span>
+                <span class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">帐户 - Cloudflare Pages 编辑</span>
+                <span class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">区域 - 区域 读取</span>
+              </div>
+              <button type="button" onclick="openUsage()" class="mt-2 text-cf-blue hover:underline">查看完整权限说明 →</button>
+            </div>
+          </div>
+          <div class="flex gap-3 pt-2">
+            <button onclick="closeAddAccount()" class="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm transition-colors">取消</button>
+            <button onclick="saveAccount()" class="flex-1 px-4 py-2.5 rounded-xl bg-cf-orange hover:bg-orange-600 text-white text-sm font-medium transition-colors">验证并保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KV 键值编辑器弹窗 -->
+  <div id="modal-kv-editor" class="fixed inset-0 z-[60] hidden">
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeKvEditor()"></div>
+    <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl">
+      <div class="glass rounded-2xl p-6 shadow-2xl">
+        <div class="flex items-center justify-between mb-5">
+          <h3 class="text-lg font-bold">编辑 KV 键值</h3>
+          <button onclick="closeKvEditor()" class="text-slate-400 hover:text-slate-200"><svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        </div>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium mb-2">Key</label>
+            <input id="kv-edit-key" type="text" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange font-mono" readonly>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-2">Value</label>
+            <textarea id="kv-edit-value" rows="10" class="w-full px-4 py-2.5 rounded-xl bg-slate-900 text-green-400 border border-slate-700 text-sm outline-none focus:border-cf-orange font-mono resize-none"></textarea>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium mb-2">Expiration TTL（秒）</label>
+              <input id="kv-edit-ttl" type="number" placeholder="留空为永久" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-2">Metadata（JSON）</label>
+              <input id="kv-edit-metadata" type="text" placeholder='{"source":"admin"}' class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange font-mono">
+            </div>
+          </div>
+          <div class="flex gap-3 pt-2">
+            <button onclick="closeKvEditor()" class="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm transition-colors">取消</button>
+            <button onclick="saveKvValue()" class="flex-1 px-4 py-2.5 rounded-xl bg-cf-orange hover:bg-orange-600 text-white text-sm font-medium transition-colors">保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Worker 脚本编辑器弹窗 -->
+  <div id="modal-worker-editor" class="fixed inset-0 z-[60] hidden">
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeWorkerEditor()"></div>
+    <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl h-[80vh]">
+      <div class="glass rounded-2xl p-6 shadow-2xl h-full flex flex-col">
+        <div class="flex items-center justify-between mb-5">
+          <h3 class="text-lg font-bold">部署 Worker</h3>
+          <button onclick="closeWorkerEditor()" class="text-slate-400 hover:text-slate-200"><svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        </div>
+        <div class="space-y-4 flex-1 flex flex-col min-h-0">
+          <div>
+            <label class="block text-sm font-medium mb-2">脚本名称</label>
+            <input id="worker-edit-name" type="text" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange font-mono" placeholder="my-worker">
+          </div>
+          <div class="flex flex-col min-h-0">
+            <div class="flex items-center justify-between mb-2">
+              <label class="block text-sm font-medium">环境变量 / Secrets</label>
+              <button type="button" onclick="addWorkerEnvVar()" class="text-xs px-2.5 py-1 rounded-lg bg-cf-orange/10 text-cf-orange hover:bg-cf-orange/20 transition-colors">+ 添加</button>
+            </div>
+            <div id="worker-env-list" class="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
+              <div class="text-xs text-slate-500 text-center py-2">暂无环境变量</div>
+            </div>
+            <p class="text-xs text-slate-500 mt-1.5">普通变量会随脚本一起部署；Secret 会通过 Workers Secrets API 单独上传，编辑时需重新输入值。</p>
+          </div>
+          <div class="flex-1 flex flex-col min-h-0">
+            <label class="block text-sm font-medium mb-2">脚本代码</label>
+            <div class="flex-1 flex rounded-xl border border-slate-700 overflow-hidden bg-slate-900 min-h-0 relative">
+              <div id="worker-line-numbers" class="absolute left-0 top-0 w-12 bg-slate-800/50 text-slate-500 text-sm font-mono py-2.5 pr-2 text-right overflow-visible select-none" style="line-height: 1.6;">1</div>
+              <textarea id="worker-edit-code" class="flex-1 w-full px-4 py-2.5 pl-16 bg-transparent text-green-400 text-sm outline-none focus:border-cf-orange font-mono resize-none" style="line-height: 1.6;" wrap="off" placeholder="export default {&#10;  async fetch(request) {&#10;    return new Response('Hello World');&#10;  }&#10;}" oninput="updateWorkerLineNumbers()" onscroll="syncWorkerLineNumbers()"></textarea>
+            </div>
+          </div>
+          <div class="flex gap-3 pt-2">
+            <button onclick="closeWorkerEditor()" class="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm transition-colors">取消</button>
+            <button onclick="saveWorker()" class="flex-1 px-4 py-2.5 rounded-xl bg-cf-orange hover:bg-orange-600 text-white text-sm font-medium transition-colors">部署</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Worker 路由与域名管理弹窗 -->
+  <div id="modal-worker-routes" class="fixed inset-0 z-[60] hidden">
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeWorkerRoutes()"></div>
+    <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl h-[85vh]">
+      <div class="glass rounded-2xl p-6 shadow-2xl h-full flex flex-col">
+        <div class="flex items-center justify-between mb-5">
+          <h3 class="text-lg font-bold">Worker 路由与域名：<span id="worker-routes-name" class="font-mono text-cf-orange"></span></h3>
+          <button onclick="closeWorkerRoutes()" class="text-slate-400 hover:text-slate-200"><svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        </div>
+        <div class="space-y-5 flex-1 overflow-y-auto custom-scrollbar pr-1">
+          <!-- workers.dev 子域名开关 -->
+          <div class="p-4 rounded-xl bg-slate-100/50 dark:bg-slate-800/50">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-sm font-medium">默认 *.workers.dev 子域名</div>
+                <div class="text-xs text-slate-500 mt-0.5">开启后可通过 <span id="worker-routes-subdomain-hint" class="font-mono text-cf-blue"></span> 访问</div>
+              </div>
+              <div class="flex gap-2">
+                <button onclick="toggleWorkerSubdomain(true)" class="px-3 py-1.5 rounded-lg bg-green-500/10 text-green-500 text-xs hover:bg-green-500/20">启用</button>
+                <button onclick="toggleWorkerSubdomain(false)" class="px-3 py-1.5 rounded-lg bg-slate-500/10 text-slate-500 text-xs hover:bg-slate-500/20">禁用</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 自定义域名 -->
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h4 class="font-semibold text-sm">自定义域名（Custom Domains）</h4>
+              <span class="text-xs text-slate-500">Cloudflare 会自动管理 DNS 记录与证书</span>
+            </div>
+            <div class="flex gap-2 mb-3">
+              <select id="worker-routes-domain-zone-select" class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
+                <option value="">选择 Zone</option>
+              </select>
+              <input id="worker-routes-custom-domain-hostname" type="text" placeholder="例如：api.example.com" class="flex-1 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange font-mono">
+              <button onclick="addWorkerDomain()" class="px-4 py-2 rounded-xl bg-cf-orange hover:bg-orange-600 text-white text-sm font-medium transition-colors">添加</button>
+            </div>
+            <div class="rounded-xl border border-slate-200 dark:border-slate-700/50 overflow-hidden">
+              <table class="w-full text-sm">
+                <thead class="bg-slate-100/50 dark:bg-slate-800/50 text-slate-500">
+                  <tr>
+                    <th class="text-left px-4 py-2 font-medium">域名</th>
+                    <th class="text-left px-4 py-2 font-medium">Zone</th>
+                    <th class="text-left px-4 py-2 font-medium">状态</th>
+                    <th class="text-right px-4 py-2 font-medium">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="worker-routes-custom-domain-list" class="divide-y divide-slate-200 dark:divide-slate-700/50">
+                  <tr><td colspan="4" class="px-4 py-6 text-center text-slate-500 text-sm">暂无自定义域名</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Zone Routes -->
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h4 class="font-semibold text-sm">Zone Routes</h4>
+              <span class="text-xs text-slate-500">需要 Token 拥有对应 Zone 的 Workers 路由 编辑权限</span>
+            </div>
+            <div class="flex gap-2 mb-3">
+              <select id="worker-routes-zone-select" onchange="onWorkerRouteZoneChange()" class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
+                <option value="">选择 Zone</option>
+              </select>
+              <input id="worker-routes-route-pattern" type="text" placeholder="例如：example.com/api/*" class="flex-1 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange font-mono">
+              <button onclick="addWorkerRoute()" class="px-4 py-2 rounded-xl bg-cf-blue hover:bg-blue-600 text-white text-sm font-medium transition-colors">添加 Route</button>
+            </div>
+            <div class="rounded-xl border border-slate-200 dark:border-slate-700/50 overflow-hidden">
+              <table class="w-full text-sm">
+                <thead class="bg-slate-100/50 dark:bg-slate-800/50 text-slate-500">
+                  <tr>
+                    <th class="text-left px-4 py-2 font-medium">Pattern</th>
+                    <th class="text-left px-4 py-2 font-medium">脚本</th>
+                    <th class="text-right px-4 py-2 font-medium">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="worker-routes-route-list" class="divide-y divide-slate-200 dark:divide-slate-700/50">
+                  <tr><td colspan="3" class="px-4 py-6 text-center text-slate-500 text-sm">请先选择 Zone</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- D1 行编辑器弹窗 -->
+  <div id="modal-d1-row-editor" class="fixed inset-0 z-[60] hidden">
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeD1RowEditor()"></div>
+    <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-lg max-h-[80vh]">
+      <div class="glass rounded-2xl p-6 shadow-2xl flex flex-col max-h-[80vh]">
+        <div class="flex items-center justify-between mb-5">
+          <h3 class="text-lg font-bold">编辑 D1 行</h3>
+          <button onclick="closeD1RowEditor()" class="text-slate-400 hover:text-slate-200"><svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        </div>
+        <div id="d1-row-edit-fields" class="space-y-3 overflow-y-auto pr-1" style="max-height: 60vh;">
+          <!-- 动态生成字段 -->
+        </div>
+        <div class="flex gap-3 pt-4 mt-4 border-t border-slate-700/50">
+          <button onclick="closeD1RowEditor()" class="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm transition-colors">取消</button>
+          <button onclick="saveD1Row()" class="flex-1 px-4 py-2.5 rounded-xl bg-cf-orange hover:bg-orange-600 text-white text-sm font-medium transition-colors">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+
+  <!-- DNS 记录编辑器弹窗 -->
+  <div id="modal-dns-editor" class="fixed inset-0 z-[60] hidden">
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeDnsEditor()"></div>
+    <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-md">
+      <div class="glass rounded-2xl p-6 shadow-2xl">
+        <div class="flex items-center justify-between mb-5">
+          <h3 id="dns-editor-title" class="text-lg font-bold">添加 DNS 记录</h3>
+          <button onclick="closeDnsEditor()" class="text-slate-400 hover:text-slate-200"><svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        </div>
+        <div class="space-y-4">
+          <input id="dns-edit-id" type="hidden">
+          <div>
+            <label class="block text-sm font-medium mb-2">类型</label>
+            <select id="dns-edit-type" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
+              <option value="A">A</option>
+              <option value="AAAA">AAAA</option>
+              <option value="CNAME">CNAME</option>
+              <option value="MX">MX</option>
+              <option value="TXT">TXT</option>
+              <option value="SRV">SRV</option>
+              <option value="NS">NS</option>
+              <option value="CAA">CAA</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-2">名称</label>
+            <input id="dns-edit-name" type="text" placeholder="例如：www" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-2">内容</label>
+            <input id="dns-edit-content" type="text" placeholder="例如：192.0.2.1" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium mb-2">TTL</label>
+              <input id="dns-edit-ttl" type="number" value="1" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
+            </div>
+            <div class="flex items-end pb-2">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input id="dns-edit-proxied" type="checkbox" checked class="w-4 h-4 rounded border-slate-300">
+                <span class="text-sm">启用代理</span>
+              </label>
+            </div>
+          </div>
+          <div class="flex gap-3 pt-2">
+            <button onclick="closeDnsEditor()" class="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm transition-colors">取消</button>
+            <button onclick="saveDnsRecord()" class="flex-1 px-4 py-2.5 rounded-xl bg-cf-orange hover:bg-orange-600 text-white text-sm font-medium transition-colors">保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pages 本地目录部署弹窗 -->
+  <div id="modal-pages-deploy" class="fixed inset-0 z-[60] hidden">
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closePagesDeployModal()"></div>
+    <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-lg max-h-[85vh]">
+      <div class="glass rounded-2xl p-6 shadow-2xl flex flex-col max-h-[85vh]">
+        <div class="flex items-center justify-between mb-5">
+          <h3 class="text-lg font-bold">本地目录部署</h3>
+          <button onclick="closePagesDeployModal()" class="text-slate-400 hover:text-slate-200"><svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        </div>
+        <div class="space-y-4 overflow-y-auto custom-scrollbar pr-1">
+          <input id="pages-deploy-project" type="hidden">
+          <div>
+            <label class="block text-sm font-medium mb-2">本地目录路径</label>
+            <input id="pages-deploy-dir" type="text" placeholder="C:\\Users\\...\\dist" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange font-mono">
+            <p class="text-xs text-slate-500 mt-1">填写构建输出目录的绝对路径，例如 dist、out、public 等。</p>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium mb-2">分支</label>
+              <input id="pages-deploy-branch" type="text" value="main" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-2">环境</label>
+              <select id="pages-deploy-env" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
+                <option value="production">Production</option>
+                <option value="preview">Preview</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="block text-sm font-medium">环境变量 / Secrets</label>
+              <button type="button" onclick="addPagesDeployEnvVar()" class="text-xs px-2.5 py-1 rounded-lg bg-cf-orange/10 text-cf-orange hover:bg-cf-orange/20 transition-colors">+ 添加</button>
+            </div>
+            <div id="pages-deploy-env-list" class="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
+              <div class="text-xs text-slate-500 text-center py-2">暂无环境变量</div>
+            </div>
+          </div>
+          <div id="pages-deploy-log" class="hidden bg-slate-900 text-green-400 text-xs font-mono p-3 rounded-xl max-h-40 overflow-y-auto custom-scrollbar whitespace-pre-wrap"></div>
+        </div>
+        <div class="flex gap-3 pt-4 mt-4 border-t border-slate-700/50">
+          <button onclick="closePagesDeployModal()" class="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm transition-colors">取消</button>
+          <button id="pages-deploy-btn" onclick="deployPagesLocal()" class="flex-1 px-4 py-2.5 rounded-xl bg-cf-orange hover:bg-orange-600 text-white text-sm font-medium transition-colors">开始部署</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pages 自定义域名管理弹窗 -->
+  <div id="modal-pages-domains" class="fixed inset-0 z-[60] hidden">
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closePagesDomains()"></div>
+    <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[85vh]">
+      <div class="glass rounded-2xl p-6 shadow-2xl flex flex-col max-h-[85vh]">
+        <div class="flex items-center justify-between mb-5">
+          <h3 class="text-lg font-bold">Pages 自定义域名：<span id="pages-domains-project" class="font-mono text-cf-orange"></span></h3>
+          <button onclick="closePagesDomains()" class="text-slate-400 hover:text-slate-200"><svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        </div>
+        <div class="space-y-4 overflow-y-auto custom-scrollbar pr-1">
+          <div class="flex gap-2">
+            <input id="pages-domain-name" type="text" placeholder="例如：www.example.com" class="flex-1 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange font-mono">
+            <button onclick="addPagesDomain()" class="px-4 py-2.5 rounded-xl bg-cf-orange hover:bg-orange-600 text-white text-sm font-medium transition-colors">添加域名</button>
+          </div>
+          <p class="text-xs text-slate-500">添加后 Cloudflare 会提供 DNS 验证信息，请在域名 DNS 中完成验证。</p>
+          <div class="rounded-xl border border-slate-200 dark:border-slate-700/50 overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="bg-slate-100/50 dark:bg-slate-800/50 text-slate-500">
+                <tr>
+                  <th class="text-left px-4 py-3 font-medium">域名</th>
+                  <th class="text-left px-4 py-3 font-medium">状态</th>
+                  <th class="text-left px-4 py-3 font-medium">验证方式</th>
+                  <th class="text-right px-4 py-3 font-medium">操作</th>
+                </tr>
+              </thead>
+              <tbody id="pages-domains-list" class="divide-y divide-slate-200 dark:divide-slate-700/50">
+                <tr><td colspan="4" class="px-4 py-6 text-center text-slate-500 text-sm">暂无自定义域名</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 内嵌使用说明面板 -->
+  <div id="usage-panel" class="fixed inset-3 z-[70] hidden">
+    <div class="w-full h-full glass bg-slate-900/95 dark:bg-slate-900/95 light:bg-slate-50/95 rounded-3xl border border-white/10 dark:border-white/10 light:border-black/5 shadow-2xl flex flex-col overflow-hidden">
+      <!-- 面板头部 -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-white/5 dark:border-white/5">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-green-400 to-emerald-600 flex items-center justify-center text-slate-900 font-bold text-sm">?</div>
+          <h2 class="text-lg font-bold">使用说明</h2>
+        </div>
+        <button onclick="closeUsage()" class="p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-slate-400 hover:text-red-400" title="关闭">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+      <!-- 面板内容：复用独立使用说明页 -->
+      <iframe id="usage-frame" src="usage.html" class="flex-1 w-full h-full border-0 bg-slate-900/95 dark:bg-slate-900/95 light:bg-slate-50/95" title="使用说明"></iframe>
+    </div>
+  </div>
+
+</body>
+</html>
