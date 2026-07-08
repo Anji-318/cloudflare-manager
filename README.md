@@ -107,11 +107,6 @@ cloudflare多账户管理系统/
 └── README.md                     # 本文件
 ```
 
-## 与 Android 版的关系
-
-- Android 原生版位于 `C:\Users\Giga\Desktop\cloudflare-manager-android`，使用 Kotlin + Jetpack Compose 独立实现。
-- 两个版本调用同一套 Cloudflare REST API v4，但 Token 加密格式不互通，账户数据不共享。
-- 版本号保持一致：`0.2.0`。
 
 ## 常见问题
 
