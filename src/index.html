@@ -768,6 +768,42 @@
     </div>
   </div>
 
+  <!-- 编辑账户弹窗 -->
+  <div id="modal-edit-account" class="fixed inset-0 z-[60] hidden">
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeEditAccount()"></div>
+    <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-md">
+      <div class="glass rounded-2xl p-6 shadow-2xl">
+        <div class="flex items-center justify-between mb-5">
+          <h3 class="text-lg font-bold">编辑账户</h3>
+          <button onclick="closeEditAccount()" class="text-slate-400 hover:text-slate-200"><svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        </div>
+        <div class="space-y-4">
+          <input id="edit-acc-id" type="hidden">
+          <div>
+            <label class="block text-sm font-medium mb-2">账户名称</label>
+            <input id="edit-acc-name" type="text" placeholder="例如：Acme Corp" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-2">邮箱 / 备注</label>
+            <input id="edit-acc-email" type="text" placeholder="admin@example.com" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-2">API Token</label>
+            <div class="relative">
+              <input id="edit-acc-token" type="password" autocomplete="new-password" placeholder="留空则保留原 Token" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-cf-orange pr-12">
+              <button type="button" onclick="toggleEditTokenVisibility()" class="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-200/10 dark:hover:bg-slate-700/30 transition-colors"><svg id="edit-token-toggle-icon" class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg></button>
+            </div>
+            <p class="text-xs text-slate-500 mt-2">留空则保留原来的 Token，填入新值会验证并更新。</p>
+          </div>
+          <div class="flex gap-3 pt-2">
+            <button onclick="closeEditAccount()" class="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm transition-colors">取消</button>
+            <button onclick="updateAccount()" class="flex-1 px-4 py-2.5 rounded-xl bg-cf-orange hover:bg-orange-600 text-white text-sm font-medium transition-colors">保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- KV 键值编辑器弹窗 -->
   <div id="modal-kv-editor" class="fixed inset-0 z-[60] hidden">
     <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeKvEditor()"></div>

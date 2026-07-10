@@ -30,7 +30,9 @@
       currentPagesProject: null,
       pagesDomains: [],
       accountTotalRequests: null,
-      workersTotalRequests: null
+      workersTotalRequests: null,
+      accountZoneCounts: {},
+      editingAccountId: null
     };
 
     const APP_VERSION = '0.2.0';
@@ -98,7 +100,10 @@
       try {
         switch (pageId) {
           case 'dashboard': renderDashboard(); break;
-          case 'accounts': await loadAccounts(); break;
+          case 'accounts': 
+            await loadAccounts(); 
+            loadAccountZoneCounts();
+            break;
           case 'zones': await loadZones(); break;
           case 'dns':
             if (appState.currentZone) await loadDnsRecords();
@@ -300,10 +305,172 @@
         if (appState.accounts.length > 0 && !appState.currentAccount) {
           await selectAccount(appState.accounts[0].id);
         }
+        
+        // 异步加载每个账户的域名数
+        loadAccountZoneCounts();
       } catch (e) {
         console.error('Failed to load accounts:', e);
       }
     }
+
+    function openEditAccount(id) {
+      const account = appState.accounts.find(a => a.id === id);
+      if (!account) return;
+      document.getElementById('edit-acc-id').value = account.id;
+      document.getElementById('edit-acc-name').value = account.name || '';
+      document.getElementById('edit-acc-email').value = account.email || '';
+      document.getElementById('edit-acc-token').value = '';
+      resetEditTokenVisibility();
+      document.getElementById('modal-edit-account').classList.remove('hidden');
+    }
+    window.openEditAccount = openEditAccount;
+
+    function closeEditAccount() {
+      document.getElementById('modal-edit-account').classList.add('hidden');
+      resetEditTokenVisibility();
+    }
+    window.closeEditAccount = closeEditAccount;
+
+    function toggleEditTokenVisibility() {
+      const input = document.getElementById('edit-acc-token');
+      const icon = document.getElementById('edit-token-toggle-icon');
+      if (!input || !icon) return;
+      if (input.type === 'password') {
+        input.type = 'text';
+        icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a10.05 10.05 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.542 7a10.05 10.05 0 01-2.012 3.997"></path>';
+      } else {
+        input.type = 'password';
+        icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>';
+      }
+    }
+    window.toggleEditTokenVisibility = toggleEditTokenVisibility;
+
+    function resetEditTokenVisibility() {
+      const input = document.getElementById('edit-acc-token');
+      const icon = document.getElementById('edit-token-toggle-icon');
+      if (input) input.type = 'password';
+      if (icon) {
+        icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>';
+      }
+    }
+
+    async function updateAccount() {
+      const id = document.getElementById('edit-acc-id').value;
+      const name = document.getElementById('edit-acc-name').value.trim();
+      const email = document.getElementById('edit-acc-email').value.trim();
+      const newToken = document.getElementById('edit-acc-token').value.trim();
+      
+      if (!id || !name) {
+        alert('账户名称不能为空');
+        return;
+      }
+      
+      const account = appState.accounts.find(a => a.id === id);
+      if (!account) {
+        alert('账户不存在');
+        return;
+      }
+      
+      let token = newToken;
+      
+      // 如果 Token 留空，保留原 Token
+      if (!token) {
+        try {
+          token = await callBackend('get_account_token', { id });
+        } catch (e) {
+          alert('获取原 Token 失败：' + e);
+          return;
+        }
+      } else {
+        // 验证新 Token
+        try {
+          const result = await callBackend('validate_token', { token });
+          if (!result.success) {
+            alert('Token 验证失败：' + (result.errors[0]?.message || '未知错误'));
+            return;
+          }
+        } catch (e) {
+          alert('Token 验证失败：' + e);
+          return;
+        }
+      }
+      
+      const updatedAccount = {
+        id,
+        name,
+        email,
+        token_encrypted: account.token_encrypted || ''
+      };
+      
+      try {
+        const savedAccount = await callBackend('save_account', { account: updatedAccount, token });
+        
+        // 如果编辑的是当前账户，更新当前账户状态
+        if (appState.currentAccount?.id === id) {
+          appState.currentAccount = savedAccount;
+          const info = document.querySelector('.account-info');
+          if (info) {
+            info.innerHTML = `
+              <div class="text-sm font-medium truncate">${escapeHtml(savedAccount.name)}</div>
+              <div class="text-xs text-slate-400 truncate">${escapeHtml(savedAccount.email || '')}</div>
+            `;
+          }
+          const avatar = document.querySelector('.account-avatar');
+          if (avatar) avatar.textContent = savedAccount.name.charAt(0).toUpperCase();
+        }
+        
+        closeEditAccount();
+        await loadAccounts();
+        alert('账户保存成功');
+      } catch (e) {
+        alert('保存失败：' + e);
+      }
+    }
+    window.updateAccount = updateAccount;
+
+    async function loadAccountZoneCounts() {
+      if (!appState.accounts || appState.accounts.length === 0) return;
+      appState.accountZoneCounts = {};
+      // 初始化所有账户为加载中
+      appState.accounts.forEach(acc => {
+        appState.accountZoneCounts[acc.id] = null;
+      });
+      renderAccounts();
+      
+      // 限制并发数避免过多请求
+      const batchSize = 2;
+      for (let i = 0; i < appState.accounts.length; i += batchSize) {
+        const batch = appState.accounts.slice(i, i + batchSize);
+        await Promise.all(batch.map(async acc => {
+          try {
+            // 临时切换到该账户获取域名数
+            const token = await callBackend('get_account_token', { id: acc.id });
+            await callBackend('set_current_account', { account: acc, token });
+            const result = await callBackend('cloudflare_request', { method: 'GET', path: '/zones', body: null });
+            if (result.success) {
+              appState.accountZoneCounts[acc.id] = (result.result || []).length;
+            } else {
+              appState.accountZoneCounts[acc.id] = -1;
+            }
+          } catch (e) {
+            console.error(`加载账户 ${acc.id} 域名数失败:`, e);
+            appState.accountZoneCounts[acc.id] = -1;
+          }
+          renderAccounts();
+        }));
+      }
+      
+      // 恢复原来的当前账户
+      if (appState.currentAccount) {
+        try {
+          const token = await callBackend('get_account_token', { id: appState.currentAccount.id });
+          await callBackend('set_current_account', { account: appState.currentAccount, token });
+        } catch (e) {
+          console.error('恢复当前账户失败:', e);
+        }
+      }
+    }
+    window.loadAccountZoneCounts = loadAccountZoneCounts;
 
     function renderAccounts() {
       const tbody = document.getElementById('accounts-tbody');
@@ -316,6 +483,48 @@
       
       tbody.innerHTML = appState.accounts.map(acc => {
         const initial = acc.name.charAt(0).toUpperCase();
+        const zoneCount = appState.accountZoneCounts?.[acc.id];
+        let zoneCountDisplay = '-';
+        if (zoneCount === null || zoneCount === undefined) {
+          zoneCountDisplay = '...';
+        } else if (zoneCount === -1) {
+          zoneCountDisplay = '-';
+        } else {
+          zoneCountDisplay = zoneCount;
+        }
+        
+        // 判断当前行是否处于编辑模式
+        const isEditing = appState.editingAccountId === acc.id;
+        
+        if (isEditing) {
+          return `
+            <tr class="bg-cf-blue/5 transition-colors">
+              <td class="px-5 py-4">
+                <div class="flex items-center gap-3">
+                  <div class="w-8 h-8 rounded-full bg-cf-orange/10 text-cf-orange flex items-center justify-center font-bold text-xs">${initial}</div>
+                  <input type="text" id="inline-name-${acc.id}" value="${escapeHtml(acc.name)}" class="w-28 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
+                </div>
+              </td>
+              <td class="px-5 py-4">
+                <input type="text" id="inline-email-${acc.id}" value="${escapeHtml(acc.email || '')}" placeholder="邮箱/备注" class="w-36 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
+              </td>
+              <td class="px-5 py-4">
+                <div class="relative">
+                  <input type="password" id="inline-token-${acc.id}" value="" placeholder="留空则不修改" class="w-40 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange pr-7">
+                  <button type="button" onclick="toggleInlineToken('${acc.id}')" class="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-slate-200">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                  </button>
+                </div>
+              </td>
+              <td class="px-5 py-4 text-slate-400">${zoneCountDisplay}</td>
+              <td class="px-5 py-4">
+                <button onclick="saveInlineEdit('${acc.id}')" class="text-green-500 hover:underline text-xs mr-3">保存</button>
+                <button onclick="cancelInlineEdit()" class="text-slate-400 hover:underline text-xs">取消</button>
+              </td>
+            </tr>
+          `;
+        }
+        
         return `
           <tr class="hover:bg-slate-100/30 dark:hover:bg-slate-800/30 transition-colors">
             <td class="px-5 py-4">
@@ -326,8 +535,9 @@
             </td>
             <td class="px-5 py-4 text-slate-400">${escapeHtml(acc.email || '-')}</td>
             <td class="px-5 py-4"><span class="px-2 py-1 rounded-full text-xs bg-green-500/10 text-green-500">有效</span></td>
-            <td class="px-5 py-4">-</td>
+            <td class="px-5 py-4">${zoneCountDisplay}</td>
             <td class="px-5 py-4">
+              <button onclick="startInlineEdit('${acc.id}')" class="text-cf-blue hover:underline text-xs mr-3">编辑</button>
               <button onclick="selectAccount('${acc.id}')" class="text-cf-blue hover:underline text-xs mr-3">切换</button>
               <button onclick="deleteAccount('${acc.id}')" class="text-red-400 hover:underline text-xs">删除</button>
             </td>
@@ -350,6 +560,100 @@
         alert('删除失败：' + e);
       }
     }
+
+    // 行内编辑账户
+    function startInlineEdit(id) {
+      appState.editingAccountId = id;
+      renderAccounts();
+    }
+    window.startInlineEdit = startInlineEdit;
+
+    function cancelInlineEdit() {
+      appState.editingAccountId = null;
+      renderAccounts();
+    }
+    window.cancelInlineEdit = cancelInlineEdit;
+
+    function toggleInlineToken(id) {
+      const input = document.getElementById(`inline-token-${id}`);
+      if (!input) return;
+      input.type = input.type === 'password' ? 'text' : 'password';
+    }
+    window.toggleInlineToken = toggleInlineToken;
+
+    async function saveInlineEdit(id) {
+      const name = document.getElementById(`inline-name-${id}`)?.value.trim();
+      const email = document.getElementById(`inline-email-${id}`)?.value.trim() || '';
+      const newToken = document.getElementById(`inline-token-${id}`)?.value.trim() || '';
+      
+      if (!name) {
+        alert('账户名称不能为空');
+        return;
+      }
+      
+      const account = appState.accounts.find(a => a.id === id);
+      if (!account) {
+        alert('账户不存在');
+        return;
+      }
+      
+      let token = newToken;
+      
+      // 如果 Token 留空，保留原 Token
+      if (!token) {
+        try {
+          token = await callBackend('get_account_token', { id });
+        } catch (e) {
+          alert('获取原 Token 失败：' + e);
+          return;
+        }
+      } else {
+        // 验证新 Token
+        try {
+          const result = await callBackend('validate_token', { token });
+          if (!result.success) {
+            alert('Token 验证失败：' + (result.errors[0]?.message || '未知错误'));
+            return;
+          }
+        } catch (e) {
+          alert('Token 验证失败：' + e);
+          return;
+        }
+      }
+      
+      const updatedAccount = {
+        id,
+        name,
+        email,
+        account_id: account.account_id,
+        token_encrypted: account.token_encrypted || ''
+      };
+      
+      try {
+        const savedAccount = await callBackend('save_account', { account: updatedAccount, token });
+        
+        // 如果编辑的是当前账户，更新当前账户状态
+        if (appState.currentAccount?.id === id) {
+          appState.currentAccount = savedAccount;
+          const info = document.querySelector('.account-info');
+          if (info) {
+            info.innerHTML = `
+              <div class="text-sm font-medium truncate">${escapeHtml(savedAccount.name)}</div>
+              <div class="text-xs text-slate-400 truncate">${escapeHtml(savedAccount.email || '')}</div>
+            `;
+          }
+          const avatar = document.querySelector('.account-avatar');
+          if (avatar) avatar.textContent = savedAccount.name.charAt(0).toUpperCase();
+        }
+        
+        appState.editingAccountId = null;
+        await loadAccounts();
+        alert('账户保存成功');
+      } catch (e) {
+        alert('保存失败：' + e);
+      }
+    }
+    window.saveInlineEdit = saveInlineEdit;
 
     async function selectAccount(id) {
       const account = appState.accounts.find(a => a.id === id);
