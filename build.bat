@@ -53,7 +53,7 @@ echo  编译成功！
 echo ==========================================
 echo.
 echo 安装包位置：
-echo src-tauri\target\release\bundle\nsis\cloudflare-manager_0.1.0_x64-setup.exe
+echo src-tauri\target\release\bundle\nsis\cloudflare-manager_*_x64-setup.exe
 echo.
 
 pause
