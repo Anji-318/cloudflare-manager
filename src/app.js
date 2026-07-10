@@ -751,9 +751,22 @@
           reqCountEl.textContent = '-';
           if (quotaEl) quotaEl.textContent = '';
           if (statusEl) {
-            statusEl.textContent = '数据延迟';
-            statusEl.className = 'text-xs text-yellow-500';
-            statusEl.title = appState.workersRequestsError;
+            // 根据错误类型显示不同提示
+            const err = appState.workersRequestsError;
+            if (err.includes('权限')) {
+              statusEl.textContent = '权限不足';
+              statusEl.className = 'text-xs text-red-400';
+            } else if (err.includes('暂无')) {
+              statusEl.textContent = '无 Workers';
+              statusEl.className = 'text-xs text-slate-500';
+            } else if (err.includes('超时')) {
+              statusEl.textContent = '网络超时';
+              statusEl.className = 'text-xs text-yellow-500';
+            } else {
+              statusEl.textContent = '数据延迟';
+              statusEl.className = 'text-xs text-yellow-500';
+            }
+            statusEl.title = err;
           }
         } else if (appState.workersTotalRequests != null) {
           // 成功状态
@@ -802,9 +815,16 @@
 
     // GraphQL Analytics API 查询
     async function cfGraphQL(query, variables = {}) {
-      const result = await cfRequest('POST', '/graphql', { query, variables });
+      const result = await cfRequest('POST', '/client/v4/graphql', { query, variables });
       if (!result.success) {
-        throw new Error(result.errors?.[0]?.message || 'GraphQL query failed');
+        const errorMsg = result.errors?.[0]?.message || result.messages?.[0] || 'GraphQL query failed';
+        console.error('GraphQL error:', result.errors);
+        throw new Error(errorMsg);
+      }
+      if (result.data?.errors) {
+        const gqlError = result.data.errors[0]?.message || 'GraphQL execution error';
+        console.error('GraphQL execution error:', result.data.errors);
+        throw new Error(gqlError);
       }
       return result.data;
     }
@@ -926,8 +946,21 @@
       const since = today.toISOString();
       const until = new Date().toISOString();
       
+      // 先设置默认配额
+      appState.workersQuotaLimit = 100000;
+      
       try {
-        // 1. 查询 Workers 请求数
+        // 1. 查询 Workers 配额限制（REST API 通常权限要求较低）
+        try {
+          const quotaResult = await cfRequest('GET', `/accounts/${accountId}/workers/quotas`);
+          if (quotaResult.success && quotaResult.result) {
+            appState.workersQuotaLimit = quotaResult.result.daily_requests || 100000;
+          }
+        } catch (quotaErr) {
+          console.log('Quota fetch failed, using default 100000:', quotaErr);
+        }
+        
+        // 2. 尝试 GraphQL 查询 Workers 请求数
         const query = `
           query GetWorkersRequests($accountTag: String!, $since: Time!, $until: Time!) {
             viewer {
@@ -963,25 +996,24 @@
         
         appState.workersTotalRequests = totalRequests;
         appState.workersRequestsError = null;
-        
-        // 2. 查询 Workers 配额限制
-        try {
-          const quotaResult = await cfRequest('GET', `/accounts/${accountId}/workers/quotas`);
-          if (quotaResult.success && quotaResult.result) {
-            appState.workersQuotaLimit = quotaResult.result.daily_requests || 100000;
-          } else {
-            appState.workersQuotaLimit = 100000; // 默认免费配额
-          }
-        } catch (quotaErr) {
-          console.log('Quota fetch failed, using default:', quotaErr);
-          appState.workersQuotaLimit = 100000; // 默认免费配额
-        }
-        
         console.log(`Workers requests: ${totalRequests} / ${appState.workersQuotaLimit}`);
+        
       } catch (e) {
         console.error('Workers analytics load failed:', e);
+        
+        // 判断错误类型
+        const errorMsg = String(e).toLowerCase();
+        if (errorMsg.includes('permission') || errorMsg.includes('unauthorized') || errorMsg.includes('forbidden')) {
+          appState.workersRequestsError = '权限不足：需要 Analytics 读取权限';
+        } else if (errorMsg.includes('not found') || errorMsg.includes('unknown')) {
+          appState.workersRequestsError = '暂无 Workers 数据';
+        } else if (errorMsg.includes('timeout') || errorMsg.includes('network')) {
+          appState.workersRequestsError = '网络超时';
+        } else {
+          appState.workersRequestsError = '数据延迟（约1-3小时）';
+        }
+        
         appState.workersTotalRequests = null;
-        appState.workersRequestsError = e.message || '加载失败';
       }
     }
 
