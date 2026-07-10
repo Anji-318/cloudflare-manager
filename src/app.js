@@ -487,7 +487,6 @@
         }
         appState.dnsRecords = result.result || [];
         renderDnsRecords();
-        renderDashboard();
       } catch (e) {
         alert('加载 DNS 记录失败：' + e);
       }
