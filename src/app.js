@@ -824,8 +824,9 @@
 
     // GraphQL Analytics API 查询
     async function cfGraphQL(query, variables = {}) {
-      // GraphQL API 返回格式与标准 REST API 不同，使用 text 接口直接获取原始响应
-      const text = await cfRequestText('POST', '/client/v4/graphql', { query, variables }, 'application/json');
+      // 注意：后端会自动添加 https://api.cloudflare.com/client/v4 前缀
+      // 所以这里只需要传 /graphql，不是 /client/v4/graphql
+      const text = await cfRequestText('POST', '/graphql', { query, variables }, 'application/json');
       const result = JSON.parse(text);
       
       // GraphQL 错误处理
