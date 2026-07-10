@@ -820,8 +820,8 @@
         const type = record.type || 'A';
         const colorClass = typeColors[type] || 'bg-slate-500/10 text-slate-400';
         const proxied = record.proxied ? 
-          '<div class="w-10 h-5 rounded-full bg-cf-orange relative"><div class="absolute right-1 top-1 w-3 h-3 rounded-full bg-white shadow"></div></div>' :
-          '<div class="w-10 h-5 rounded-full bg-slate-400 relative"><div class="absolute left-1 top-1 w-3 h-3 rounded-full bg-white shadow"></div></div>';
+          `<button onclick="toggleDnsProxy('${record.id}', false)" class="w-10 h-5 rounded-full bg-cf-orange relative transition-colors hover:opacity-90"><div class="absolute right-1 top-1 w-3 h-3 rounded-full bg-white shadow"></div></button>` :
+          `<button onclick="toggleDnsProxy('${record.id}', true)" class="w-10 h-5 rounded-full bg-slate-400 relative transition-colors hover:opacity-90"><div class="absolute left-1 top-1 w-3 h-3 rounded-full bg-white shadow"></div></button>`;
         
         return `
           <tr class="hover:bg-slate-100/30 dark:hover:bg-slate-800/30 transition-colors">
@@ -831,7 +831,7 @@
             <td class="px-5 py-4 text-slate-400">${record.ttl || 1}</td>
             <td class="px-5 py-4">${proxied}</td>
             <td class="px-5 py-4">
-              <button class="text-cf-blue hover:underline text-xs mr-3">编辑</button>
+              <button onclick="openDnsEditor('${record.id}')" class="text-cf-blue hover:underline text-xs mr-3">编辑</button>
               <button onclick="deleteDnsRecord('${record.id}')" class="text-red-400 hover:underline text-xs">删除</button>
             </td>
           </tr>
@@ -939,6 +939,37 @@
         alert('保存失败：' + e);
       }
     }
+
+    async function toggleDnsProxy(recordId, enable) {
+      if (!appState.currentZone) return;
+      
+      const record = appState.dnsRecords.find(r => r.id === recordId);
+      if (!record) return;
+      
+      const updatedRecord = {
+        type: record.type,
+        name: record.name,
+        content: record.content,
+        ttl: record.ttl || 1,
+        proxied: enable
+      };
+      
+      try {
+        const result = await callBackend('update_dns_record', {
+          zoneId: appState.currentZone.id,
+          recordId,
+          record: updatedRecord
+        });
+        if (!result.success) {
+          alert('切换代理失败：' + (result.errors[0]?.message || '未知错误'));
+          return;
+        }
+        await loadDnsRecords();
+      } catch (e) {
+        alert('切换代理失败：' + e);
+      }
+    }
+    window.toggleDnsProxy = toggleDnsProxy;
 
     async function purgeCache() {
       if (!appState.currentZone) {
