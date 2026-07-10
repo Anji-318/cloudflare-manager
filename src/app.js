@@ -941,10 +941,14 @@
       }
       
       const accountId = appState.currentAccount.account_id;
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const since = today.toISOString();
+      
+      // 使用 UTC 时间今日0点，与 Cloudflare 官网保持一致
+      const now = new Date();
+      const todayUtc = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0));
+      const since = todayUtc.toISOString();
       const until = new Date().toISOString();
+      
+      console.log('Workers query range:', since, 'to', until);
       
       // 先设置默认配额
       appState.workersQuotaLimit = 100000;
