@@ -820,17 +820,17 @@
 
     // GraphQL Analytics API 查询
     async function cfGraphQL(query, variables = {}) {
-      const result = await cfRequest('POST', '/client/v4/graphql', { query, variables });
-      if (!result.success) {
-        const errorMsg = result.errors?.[0]?.message || result.messages?.[0] || 'GraphQL query failed';
+      // GraphQL API 返回格式与标准 REST API 不同，使用 text 接口直接获取原始响应
+      const text = await cfRequestText('POST', '/client/v4/graphql', { query, variables }, 'application/json');
+      const result = JSON.parse(text);
+      
+      // GraphQL 错误处理
+      if (result.errors && result.errors.length > 0) {
+        const gqlError = result.errors[0]?.message || JSON.stringify(result.errors[0]);
         console.error('GraphQL error:', result.errors);
-        throw new Error(errorMsg);
-      }
-      if (result.data?.errors) {
-        const gqlError = result.data.errors[0]?.message || 'GraphQL execution error';
-        console.error('GraphQL execution error:', result.data.errors);
         throw new Error(gqlError);
       }
+      
       return result.data;
     }
 
