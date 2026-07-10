@@ -47,13 +47,29 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+:: 查找实际生成的安装包
+set "BUNDLE_DIR=src-tauri\target\release\bundle\nsis"
+set "FOUND_FILE="
+for %%f in ("%BUNDLE_DIR%\cloudflare-manager_*_x64-setup.exe") do (
+    set "FOUND_FILE=%%f"
+)
+
 echo.
 echo ==========================================
 echo  编译成功！
 echo ==========================================
 echo.
-echo 安装包位置：
-echo src-tauri\target\release\bundle\nsis\cloudflare-manager_*_x64-setup.exe
-echo.
+
+if defined FOUND_FILE (
+    echo 安装包位置：
+    echo %FOUND_FILE%
+    echo.
+    echo [提示] 直接运行安装包即可安装应用。
+) else (
+    echo 安装包位置：
+    echo %BUNDLE_DIR%\cloudflare-manager_*_x64-setup.exe
+    echo.
+    echo [提示] 未找到安装包，请检查 bundle 目录。
+)
 
 pause
