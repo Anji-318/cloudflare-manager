@@ -35,7 +35,7 @@
       editingAccountId: null
     };
 
-    const APP_VERSION = '0.2.0';
+    const APP_VERSION = '0.3.0';
     const REPO_URL = 'https://github.com/Anji-318/cloudflare-manager/tree/main';
 
     const pages = ['dashboard', 'accounts', 'zones', 'dns', 'workers', 'pages', 'r2', 'kvd1', 'tunnels', 'firewall', 'cache', 'analytics', 'settings'];
