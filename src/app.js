@@ -988,9 +988,6 @@
           until 
         });
         
-        // 保存原始响应用于调试显示
-        appState.workersDebugResponse = JSON.stringify(data).substring(0, 200);
-        
         const accounts = data?.viewer?.accounts || [];
         let totalRequests = 0;
         
