@@ -769,7 +769,11 @@
             statusEl.title = err;
           }
           // 显示调试信息
-          if (debugEl) debugEl.textContent = 'Debug: ' + err;
+          if (debugEl) {
+            const err = appState.workersRequestsError;
+            // 截取前80个字符显示
+            debugEl.textContent = err.length > 80 ? err.substring(0, 80) + '...' : err;
+          }
         } else if (appState.workersTotalRequests != null) {
           // 成功状态
           reqCountEl.textContent = appState.workersTotalRequests.toLocaleString();
@@ -1007,7 +1011,7 @@
         
       } catch (e) {
         console.error('Workers analytics load failed:', e);
-        appState.workersRequestsError = String(e).substring(0, 100);
+        appState.workersRequestsError = String(e);
         appState.workersTotalRequests = null;
       }
     }
