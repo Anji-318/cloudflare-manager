@@ -89,6 +89,8 @@
       appState.pagesDomains = [];
       appState.accountTotalRequests = null;
       appState.workersTotalRequests = null;
+      appState.workersQuotaLimit = null;
+      appState.workersRequestsError = null;
     }
 
     async function reloadCurrentPage() {
@@ -741,15 +743,47 @@
       if (dnsCountEl) dnsCountEl.textContent = appState.dnsRecords.length;
       
       if (reqCountEl) {
-        if (appState.workersTotalRequests != null) {
+        const quotaEl = document.getElementById('dash-req-quota');
+        const statusEl = document.getElementById('dash-req-status');
+        
+        if (appState.workersRequestsError) {
+          // 错误状态
+          reqCountEl.textContent = '-';
+          if (quotaEl) quotaEl.textContent = '';
+          if (statusEl) {
+            statusEl.textContent = '数据延迟';
+            statusEl.className = 'text-xs text-yellow-500';
+            statusEl.title = appState.workersRequestsError;
+          }
+        } else if (appState.workersTotalRequests != null) {
+          // 成功状态
           reqCountEl.textContent = appState.workersTotalRequests.toLocaleString();
+          if (quotaEl && appState.workersQuotaLimit) {
+            const pct = Math.round(appState.workersTotalRequests / appState.workersQuotaLimit * 100);
+            quotaEl.textContent = `/ ${appState.workersQuotaLimit.toLocaleString()}`;
+            if (statusEl) {
+              statusEl.textContent = `${pct}%`;
+              if (pct >= 90) statusEl.className = 'text-xs text-red-500 font-medium';
+              else if (pct >= 70) statusEl.className = 'text-xs text-yellow-500';
+              else statusEl.className = 'text-xs text-green-500';
+            }
+          }
         } else if (appState.currentAccount) {
+          // 加载中
           reqCountEl.textContent = '加载中...';
+          if (quotaEl) quotaEl.textContent = '';
+          if (statusEl) {
+            statusEl.textContent = '';
+            statusEl.className = 'text-xs';
+          }
           loadWorkersTotalRequests().then(() => renderDashboard()).catch(() => {
             reqCountEl.textContent = '-';
           });
         } else {
+          // 未选择账户
           reqCountEl.textContent = '-';
+          if (quotaEl) quotaEl.textContent = '';
+          if (statusEl) statusEl.textContent = '';
         }
       }
       
@@ -881,6 +915,8 @@
     async function loadWorkersTotalRequests() {
       if (!appState.currentAccount) {
         appState.workersTotalRequests = null;
+        appState.workersQuotaLimit = null;
+        appState.workersRequestsError = null;
         return;
       }
       
@@ -891,7 +927,7 @@
       const until = new Date().toISOString();
       
       try {
-        // 使用 GraphQL 查询账户 Workers 请求数
+        // 1. 查询 Workers 请求数
         const query = `
           query GetWorkersRequests($accountTag: String!, $since: Time!, $until: Time!) {
             viewer {
@@ -926,12 +962,35 @@
         });
         
         appState.workersTotalRequests = totalRequests;
-        console.log(`Workers total requests today: ${totalRequests}`);
+        appState.workersRequestsError = null;
+        
+        // 2. 查询 Workers 配额限制
+        try {
+          const quotaResult = await cfRequest('GET', `/accounts/${accountId}/workers/quotas`);
+          if (quotaResult.success && quotaResult.result) {
+            appState.workersQuotaLimit = quotaResult.result.daily_requests || 100000;
+          } else {
+            appState.workersQuotaLimit = 100000; // 默认免费配额
+          }
+        } catch (quotaErr) {
+          console.log('Quota fetch failed, using default:', quotaErr);
+          appState.workersQuotaLimit = 100000; // 默认免费配额
+        }
+        
+        console.log(`Workers requests: ${totalRequests} / ${appState.workersQuotaLimit}`);
       } catch (e) {
         console.error('Workers analytics load failed:', e);
         appState.workersTotalRequests = null;
+        appState.workersRequestsError = e.message || '加载失败';
       }
     }
+
+    async function refreshWorkersRequests() {
+      appState.workersTotalRequests = null;
+      appState.workersRequestsError = null;
+      renderDashboard();
+    }
+    window.refreshWorkersRequests = refreshWorkersRequests;
 
     async function loadAnalytics() {
       if (!appState.currentZone) {
