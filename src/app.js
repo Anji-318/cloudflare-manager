@@ -783,7 +783,7 @@
               else statusEl.className = 'text-xs text-green-500';
             }
           }
-          if (debugEl) debugEl.textContent = '';
+          if (debugEl) debugEl.textContent = appState.workersDebugResponse || '';
         } else if (appState.currentAccount) {
           // 加载中
           reqCountEl.textContent = '加载中...';
@@ -792,7 +792,7 @@
             statusEl.textContent = '';
             statusEl.className = 'text-xs';
           }
-          if (debugEl) debugEl.textContent = '加载中...';
+          if (debugEl) debugEl.textContent = '请求中...';
           loadWorkersTotalRequests().then(() => renderDashboard()).catch(() => {
             reqCountEl.textContent = '-';
           });
@@ -955,23 +955,22 @@
       appState.workersQuotaLimit = 100000;
       
       try {
-        // 1. 查询 Workers 配额限制（REST API 通常权限要求较低）
+        // 1. 查询 Workers 配额限制
         try {
           const quotaResult = await cfRequest('GET', `/accounts/${accountId}/workers/quotas`);
-          console.log('Workers quotas result:', quotaResult);
           if (quotaResult.success && quotaResult.result) {
             appState.workersQuotaLimit = quotaResult.result.daily_requests || 100000;
           }
         } catch (quotaErr) {
-          console.log('Quota fetch failed, using default 100000:', quotaErr);
+          console.log('Quota fetch failed:', quotaErr);
         }
         
-        // 2. 尝试 GraphQL 查询 Workers 请求数 - 使用 workersInvocationsByOwnerAndScriptGroups
+        // 2. 尝试 GraphQL 查询 Workers 请求数
         const query = `
           query GetWorkersRequests($accountTag: String!, $since: Time!, $until: Time!) {
             viewer {
               accounts(filter: { accountTag: $accountTag }) {
-                workersInvocationsByOwnerAndScriptGroups(
+                workersInvocationsAdaptive(
                   limit: 10000
                   filter: { datetime_geq: $since, datetime_leq: $until }
                 ) {
@@ -984,20 +983,20 @@
           }
         `;
         
-        console.log('Sending GraphQL query with accountTag:', accountId);
         const data = await cfGraphQL(query, { 
           accountTag: accountId, 
           since, 
           until 
         });
         
-        console.log('GraphQL response:', data);
+        // 保存原始响应用于调试显示
+        appState.workersDebugResponse = JSON.stringify(data).substring(0, 200);
         
         const accounts = data?.viewer?.accounts || [];
         let totalRequests = 0;
         
         accounts.forEach(acc => {
-          const invocations = acc.workersInvocationsByOwnerAndScriptGroups || [];
+          const invocations = acc.workersInvocationsAdaptive || [];
           invocations.forEach(item => {
             totalRequests += item.sum?.requests || 0;
           });
@@ -1005,25 +1004,10 @@
         
         appState.workersTotalRequests = totalRequests;
         appState.workersRequestsError = null;
-        console.log(`Workers requests: ${totalRequests} / ${appState.workersQuotaLimit}`);
         
       } catch (e) {
         console.error('Workers analytics load failed:', e);
-        
-        // 判断错误类型
-        const errorMsg = String(e).toLowerCase();
-        console.log('Error details:', errorMsg);
-        
-        if (errorMsg.includes('permission') || errorMsg.includes('unauthorized') || errorMsg.includes('forbidden')) {
-          appState.workersRequestsError = '权限不足：需要 Analytics 读取权限';
-        } else if (errorMsg.includes('not found') || errorMsg.includes('unknown') || errorMsg.includes('does not have')) {
-          appState.workersRequestsError = '暂无 Workers 数据';
-        } else if (errorMsg.includes('timeout') || errorMsg.includes('network')) {
-          appState.workersRequestsError = '网络超时';
-        } else {
-          appState.workersRequestsError = '数据延迟（约1-3小时）';
-        }
-        
+        appState.workersRequestsError = String(e).substring(0, 100);
         appState.workersTotalRequests = null;
       }
     }
