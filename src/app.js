@@ -745,6 +745,7 @@
       if (reqCountEl) {
         const quotaEl = document.getElementById('dash-req-quota');
         const statusEl = document.getElementById('dash-req-status');
+        const debugEl = document.getElementById('dash-req-debug');
         
         if (appState.workersRequestsError) {
           // 错误状态
@@ -768,6 +769,8 @@
             }
             statusEl.title = err;
           }
+          // 显示调试信息
+          if (debugEl) debugEl.textContent = 'Debug: ' + err;
         } else if (appState.workersTotalRequests != null) {
           // 成功状态
           reqCountEl.textContent = appState.workersTotalRequests.toLocaleString();
@@ -781,6 +784,7 @@
               else statusEl.className = 'text-xs text-green-500';
             }
           }
+          if (debugEl) debugEl.textContent = '';
         } else if (appState.currentAccount) {
           // 加载中
           reqCountEl.textContent = '加载中...';
@@ -789,6 +793,7 @@
             statusEl.textContent = '';
             statusEl.className = 'text-xs';
           }
+          if (debugEl) debugEl.textContent = '加载中...';
           loadWorkersTotalRequests().then(() => renderDashboard()).catch(() => {
             reqCountEl.textContent = '-';
           });
@@ -797,6 +802,7 @@
           reqCountEl.textContent = '-';
           if (quotaEl) quotaEl.textContent = '';
           if (statusEl) statusEl.textContent = '';
+          if (debugEl) debugEl.textContent = '';
         }
       }
       
