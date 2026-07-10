@@ -953,6 +953,7 @@
         // 1. 查询 Workers 配额限制（REST API 通常权限要求较低）
         try {
           const quotaResult = await cfRequest('GET', `/accounts/${accountId}/workers/quotas`);
+          console.log('Workers quotas result:', quotaResult);
           if (quotaResult.success && quotaResult.result) {
             appState.workersQuotaLimit = quotaResult.result.daily_requests || 100000;
           }
@@ -960,12 +961,12 @@
           console.log('Quota fetch failed, using default 100000:', quotaErr);
         }
         
-        // 2. 尝试 GraphQL 查询 Workers 请求数
+        // 2. 尝试 GraphQL 查询 Workers 请求数 - 使用 workersInvocationsByOwnerAndScriptGroups
         const query = `
           query GetWorkersRequests($accountTag: String!, $since: Time!, $until: Time!) {
             viewer {
               accounts(filter: { accountTag: $accountTag }) {
-                workersInvocationsAdaptive(
+                workersInvocationsByOwnerAndScriptGroups(
                   limit: 10000
                   filter: { datetime_geq: $since, datetime_leq: $until }
                 ) {
@@ -978,17 +979,20 @@
           }
         `;
         
+        console.log('Sending GraphQL query with accountTag:', accountId);
         const data = await cfGraphQL(query, { 
           accountTag: accountId, 
           since, 
           until 
         });
         
+        console.log('GraphQL response:', data);
+        
         const accounts = data?.viewer?.accounts || [];
         let totalRequests = 0;
         
         accounts.forEach(acc => {
-          const invocations = acc.workersInvocationsAdaptive || [];
+          const invocations = acc.workersInvocationsByOwnerAndScriptGroups || [];
           invocations.forEach(item => {
             totalRequests += item.sum?.requests || 0;
           });
@@ -1003,9 +1007,11 @@
         
         // 判断错误类型
         const errorMsg = String(e).toLowerCase();
+        console.log('Error details:', errorMsg);
+        
         if (errorMsg.includes('permission') || errorMsg.includes('unauthorized') || errorMsg.includes('forbidden')) {
           appState.workersRequestsError = '权限不足：需要 Analytics 读取权限';
-        } else if (errorMsg.includes('not found') || errorMsg.includes('unknown')) {
+        } else if (errorMsg.includes('not found') || errorMsg.includes('unknown') || errorMsg.includes('does not have')) {
           appState.workersRequestsError = '暂无 Workers 数据';
         } else if (errorMsg.includes('timeout') || errorMsg.includes('network')) {
           appState.workersRequestsError = '网络超时';
