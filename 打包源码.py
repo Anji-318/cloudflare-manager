@@ -13,6 +13,12 @@ from pathlib import Path
 import fnmatch
 import re
 
+# Windows 控制台 UTF-8 输出支持
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 # 智能排除规则
 EXCLUDE_DIRS = {
     '.git', '.gradle', '.idea', '.kotlin', '.vs', '.cache', '.venv',
@@ -76,8 +82,40 @@ def should_exclude(path: Path, root: Path) -> bool:
 
 
 def get_version() -> str:
-    """自动读取版本号"""
-    # 尝试 build.gradle.kts
+    """自动读取版本号，支持多种项目类型"""
+    # 1. 尝试 package.json (Node.js / Tauri 项目)
+    p = Path('package.json')
+    if p.exists():
+        content = p.read_text(encoding='utf-8')
+        m = re.search(r'"version"\s*:\s*"([^"]+)"', content)
+        if m:
+            return m.group(1)
+    
+    # 2. 尝试 Cargo.toml (Rust 项目)
+    p = Path('src-tauri/Cargo.toml')
+    if p.exists():
+        content = p.read_text(encoding='utf-8')
+        m = re.search(r'^version\s*=\s*"([^"]+)"', content, re.MULTILINE)
+        if m:
+            return m.group(1)
+    
+    # 3. 尝试 tauri.conf.json
+    p = Path('src-tauri/tauri.conf.json')
+    if p.exists():
+        content = p.read_text(encoding='utf-8')
+        m = re.search(r'"version"\s*:\s*"([^"]+)"', content)
+        if m:
+            return m.group(1)
+    
+    # 4. 尝试 app.js 中的 APP_VERSION
+    p = Path('src/app.js')
+    if p.exists():
+        content = p.read_text(encoding='utf-8')
+        m = re.search(r"APP_VERSION\s*=\s*'([^']+)'", content)
+        if m:
+            return m.group(1)
+    
+    # 5. 尝试 build.gradle.kts (Android 项目)
     for build_file in ['app/build.gradle.kts', 'build.gradle.kts']:
         p = Path(build_file)
         if p.exists():
@@ -86,7 +124,7 @@ def get_version() -> str:
             if m:
                 return m.group(1)
     
-    # 尝试 build.gradle
+    # 6. 尝试 build.gradle
     for build_file in ['app/build.gradle', 'build.gradle']:
         p = Path(build_file)
         if p.exists():
