@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Rust build artifacts
+src-tauri/target/
+
+# Tauri generated files
+src-tauri/gen/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor directories and files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*~
+
+# Distribution / backup archives
+*.zip
+*.exe
+*.msi
+backup/
+dist/
+
+# Local-only tools / sensitive files
+git-push.bat
+会话记录备份.md

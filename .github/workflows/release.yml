@@ -1,0 +1,75 @@
+name: Release Desktop App
+
+on:
+  # 只允许手动触发，不会在上传文件或提交时自动发版
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, e.g. v0.2.0'
+        required: true
+        default: 'v0.2.0'
+      draft:
+        description: 'Create as draft release'
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    permissions:
+      contents: write   # 用于创建 Release 和上传附件
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Tauri app
+        run: npm run build
+
+      - name: Get app version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release and upload assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ github.event.inputs.tag }}"
+          DRAFT_FLAG=""
+
+          if [ "${{ github.event.inputs.draft }}" = "true" ]; then
+            DRAFT_FLAG="--draft"
+          fi
+
+          gh release create "$TAG" \
+            --title "Cloudflare Manager $TAG" \
+            --generate-notes \
+            $DRAFT_FLAG \
+            "src-tauri/target/release/cloudflare-manager.exe#cloudflare-manager-$VERSION.exe" \
+            "src-tauri/target/release/bundle/nsis/cloudflare-manager_${VERSION}_x64-setup.exe#cloudflare-manager-${VERSION}_x64-setup.exe"
