@@ -35,7 +35,7 @@
       editingAccountId: null
     };
 
-    const APP_VERSION = '0.3.0';
+    const APP_VERSION = '0.3.1';
     const REPO_URL = 'https://github.com/Anji-318/cloudflare-manager/tree/main';
 
     const pages = ['dashboard', 'accounts', 'zones', 'dns', 'workers', 'pages', 'r2', 'kvd1', 'tunnels', 'firewall', 'cache', 'analytics', 'settings'];
@@ -186,32 +186,54 @@
       }
     });
 
-    function toggleTheme() {
+    function applyTheme(isDark) {
       const html = document.documentElement;
       const toggle = document.getElementById('theme-toggle');
       const icon = document.getElementById('theme-icon');
-      if (html.classList.contains('dark')) {
-        html.classList.remove('dark');
-        html.classList.add('light');
-        if (toggle) {
-          toggle.classList.remove('bg-cf-orange');
-          toggle.classList.add('bg-slate-300');
-          toggle.querySelector('span').classList.remove('translate-x-6');
-          toggle.querySelector('span').classList.add('translate-x-1');
-        }
-        icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>';
-      } else {
+      if (isDark) {
         html.classList.add('dark');
         html.classList.remove('light');
+        html.style.colorScheme = 'dark';
+        try { localStorage.setItem('theme', 'dark'); } catch (e) {}
         if (toggle) {
           toggle.classList.add('bg-cf-orange');
           toggle.classList.remove('bg-slate-300');
-          toggle.querySelector('span').classList.add('translate-x-6');
-          toggle.querySelector('span').classList.remove('translate-x-1');
+          const span = toggle.querySelector('span');
+          if (span) {
+            span.classList.add('translate-x-6');
+            span.classList.remove('translate-x-1');
+          }
         }
-        icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>';
+        if (icon) {
+          icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>';
+        }
+      } else {
+        html.classList.remove('dark');
+        html.classList.add('light');
+        html.style.colorScheme = 'light';
+        try { localStorage.setItem('theme', 'light'); } catch (e) {}
+        if (toggle) {
+          toggle.classList.remove('bg-cf-orange');
+          toggle.classList.add('bg-slate-300');
+          const span = toggle.querySelector('span');
+          if (span) {
+            span.classList.remove('translate-x-6');
+            span.classList.add('translate-x-1');
+          }
+        }
+        if (icon) {
+          icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>';
+        }
       }
     }
+
+    function toggleTheme() {
+      const html = document.documentElement;
+      const isDark = html.classList.contains('dark');
+      applyTheme(!isDark);
+    }
+    window.toggleTheme = toggleTheme;
+    window.applyTheme = applyTheme;
 
     function openAddAccount() {
       document.getElementById('modal-add-account').classList.remove('hidden');
@@ -3034,6 +3056,12 @@
 
     // 初始化
     document.addEventListener('DOMContentLoaded', () => {
+      // 启动时强制同步主题，避免半透明 glass 叠在错误底色上发灰
+      let saved = null;
+      try { saved = localStorage.getItem('theme'); } catch (e) {}
+      const isDark = saved ? saved === 'dark' : true; // 默认深色
+      applyTheme(isDark);
+
       const versionEl = document.getElementById('app-version');
       if (versionEl) versionEl.textContent = APP_VERSION;
       loadAccounts();
@@ -3042,12 +3070,21 @@
         if (appState.currentAccount) refreshApiStatus();
       }, 60000);
       // 隐藏启动加载动画
-      const splash = document.getElementById('splash-screen');
-      if (splash) {
-        splash.style.opacity = '0';
-        splash.style.transition = 'opacity 0.3s ease';
-        setTimeout(() => splash.remove(), 300);
-      }
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const splash = document.getElementById('splash-screen');
+          if (splash) {
+            splash.style.opacity = '0';
+            splash.style.transition = 'opacity 0.3s ease';
+            setTimeout(() => {
+              splash.remove();
+              document.documentElement.classList.add('ready');
+            }, 300);
+          } else {
+            document.documentElement.classList.add('ready');
+          }
+        });
+      });
     });
 
     // 键盘快捷键：Ctrl+K 聚焦搜索（仅域名页）

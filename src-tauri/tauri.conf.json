@@ -1,13 +1,13 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "cloudflare-manager",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "identifier": "com.cloudflare-manager.app",
   "build": {
     "frontendDist": "../src",
     "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "npx serve src -p 1420 -s -n",
-    "beforeBuildCommand": ""
+    "beforeDevCommand": "npx concurrently -k \"npx tailwindcss -i ./src/input.css -o ./src/tailwind.css --watch\" \"npx serve src -p 1420 -s -n\"",
+    "beforeBuildCommand": "npx tailwindcss -i ./src/input.css -o ./src/tailwind.css --minify"
   },
   "app": {
     "withGlobalTauri": true,

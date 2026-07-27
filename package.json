@@ -1,19 +1,24 @@
 {
   "name": "cloudflare-manager",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Cloudflare 多账户管理系统",
   "main": "index.js",
   "scripts": {
     "tauri": "tauri",
-    "dev": "tauri dev",
-    "build": "tauri build",
+    "dev": "npm run build:css && tauri dev",
+    "build": "npm run build:css && tauri build",
+    "build:css": "npx tailwindcss -i ./src/input.css -o ./src/tailwind.css --minify",
+    "watch:css": "npx tailwindcss -i ./src/input.css -o ./src/tailwind.css --watch",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": ["cloudflare", "manager", "tauri"],
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@tauri-apps/cli": "^2.0.0"
+    "@tauri-apps/cli": "^2.0.0",
+    "tailwindcss": "^3.4.17",
+    "postcss": "^8.4.49",
+    "autoprefixer": "^10.4.20"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
