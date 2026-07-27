@@ -1,5 +1,4 @@
 name: Release Desktop App
-
 on:
   # 只允许手动触发，不会在上传文件或提交时自动发版
   workflow_dispatch:
@@ -13,14 +12,11 @@ on:
         type: boolean
         required: false
         default: false
-
 jobs:
   release:
     runs-on: windows-latest
-
     permissions:
-      contents: write   # 用于创建 Release 和上传附件
-
+      contents: write # 用于创建 Release 和上传附件
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -44,6 +40,22 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      # 关键：确保 Tailwind 输入文件存在
+      - name: Ensure Tailwind input CSS exists
+        shell: bash
+        run: |
+          if [ ! -f ./src/input.css ]; then
+            mkdir -p src
+            cat > ./src/input.css << 'EOF'
+          @tailwind base;
+          @tailwind components;
+          @tailwind utilities;
+          EOF
+            echo "Created missing src/input.css"
+          else
+            echo "src/input.css already exists"
+          fi
+
       - name: Build Tauri app
         run: npm run build
 
@@ -62,11 +74,9 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           TAG="${{ github.event.inputs.tag }}"
           DRAFT_FLAG=""
-
           if [ "${{ github.event.inputs.draft }}" = "true" ]; then
             DRAFT_FLAG="--draft"
           fi
-
           gh release create "$TAG" \
             --title "Cloudflare Manager $TAG" \
             --generate-notes \
