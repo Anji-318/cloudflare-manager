@@ -1,6 +1,6 @@
 [package]
 name = "cloudflare-manager"
-version = "0.3.4"
+version = "0.3.5"
 description = "Cloudflare 多账户管理系统"
 authors = ["cloudflare-manager"]
 license = "MIT OR Apache-2.0"
