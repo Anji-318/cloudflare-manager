@@ -370,7 +370,10 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   display: none !important;
 }
 
-/* 侧边栏折叠时隐藏底部版本号与开源仓库链接 */
-.sidebar-collapsed .sidebar-footer {
+/* 侧边栏折叠时隐藏开源仓库链接，版本号保留并居中 */
+.sidebar-collapsed .sidebar-repo-link {
   display: none;
+}
+.sidebar-collapsed .sidebar-footer {
+  justify-content: center;
 }
