@@ -1693,6 +1693,24 @@
     }
     window.syncWorkerLineNumbers = syncWorkerLineNumbers;
 
+    function updateSnippetLineNumbers() {
+      const textarea = document.getElementById('snippet-edit-code');
+      const numbers = document.getElementById('snippet-line-numbers');
+      if (!textarea || !numbers) return;
+      const lines = textarea.value.split('\n').length || 1;
+      numbers.innerHTML = Array.from({ length: lines }, (_, i) => `<div>${i + 1}</div>`).join('');
+    }
+    window.updateSnippetLineNumbers = updateSnippetLineNumbers;
+
+    function syncSnippetLineNumbers() {
+      const textarea = document.getElementById('snippet-edit-code');
+      const numbers = document.getElementById('snippet-line-numbers');
+      if (textarea && numbers) {
+        numbers.style.transform = `translateY(-${textarea.scrollTop}px)`;
+      }
+    }
+    window.syncSnippetLineNumbers = syncSnippetLineNumbers;
+
     function parseWorkerMultipart(text) {
       if (!text || !text.startsWith('--')) return { code: text, metadata: null, metadataText: null };
       
@@ -3666,6 +3684,8 @@
         codeInput.value = "export default {\n  async fetch(request) {\n    return new Response('Hello from snippet');\n  }\n};\n";
         snippetEditRules = [];
         renderSnippetRuleRows();
+        updateSnippetLineNumbers();
+        syncSnippetLineNumbers();
         return;
       }
       // 填充该 Snippet 的触发规则
@@ -3687,6 +3707,8 @@
         codeInput.value = '';
         alert('加载代码失败: ' + e);
       }
+      updateSnippetLineNumbers();
+      syncSnippetLineNumbers();
     }
     window.openSnippetEditor = openSnippetEditor;
 
