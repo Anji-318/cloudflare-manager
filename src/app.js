@@ -35,7 +35,17 @@
       editingAccountId: null
     };
 
-    const APP_VERSION = '0.3.3';
+    // 版本号不再硬编码，启动时从后端动态读取（编译自 Cargo.toml）
+    let APP_VERSION = '';
+    async function loadAppVersion() {
+      try {
+        APP_VERSION = await callBackend('get_app_version');
+      } catch (e) {
+        console.warn('读取版本号失败:', e);
+      }
+      const versionEl = document.getElementById('app-version');
+      if (versionEl && APP_VERSION) versionEl.textContent = APP_VERSION;
+    }
     const REPO_URL = 'https://github.com/Anji-318/cloudflare-manager/tree/main';
 
     const pages = ['dashboard', 'accounts', 'zones', 'dns', 'workers', 'pages', 'r2', 'kvd1', 'tunnels', 'firewall', 'snippets', 'loadbalancer', 'healthchecks', 'cache', 'analytics', 'settings'];
@@ -4185,8 +4195,7 @@
       const isDark = saved ? saved === 'dark' : true; // 默认深色
       applyTheme(isDark);
 
-      const versionEl = document.getElementById('app-version');
-      if (versionEl) versionEl.textContent = APP_VERSION;
+      loadAppVersion();
       loadAccounts();
       applyBgSettings();
       syncBgSettingsUI();
