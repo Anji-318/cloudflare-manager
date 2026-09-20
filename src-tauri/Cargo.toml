@@ -1,9 +1,9 @@
 [package]
 name = "cloudflare-manager"
-version = "0.3.4"
+version = "0.3.3"
 description = "Cloudflare 多账户管理系统"
 authors = ["cloudflare-manager"]
-license = "MIT"
+license = "MIT OR Apache-2.0"
 repository = ""
 edition = "2021"
 rust-version = "1.77.2"
