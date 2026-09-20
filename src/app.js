@@ -752,39 +752,18 @@
         appState.accountZoneCounts[acc.id] = null;
       });
       renderAccounts();
-      
-      // 限制并发数避免过多请求
-      const batchSize = 2;
-      for (let i = 0; i < appState.accounts.length; i += batchSize) {
-        const batch = appState.accounts.slice(i, i + batchSize);
-        await Promise.all(batch.map(async acc => {
-          try {
-            // 临时切换到该账户获取域名数
-            const token = await callBackend('get_account_token', { id: acc.id });
-            await callBackend('set_current_account', { account: acc, token });
-            const result = await callBackend('cloudflare_request', { method: 'GET', path: '/zones', body: null });
-            if (result.success) {
-              appState.accountZoneCounts[acc.id] = (result.result || []).length;
-            } else {
-              appState.accountZoneCounts[acc.id] = -1;
-            }
-          } catch (e) {
-            console.error(`加载账户 ${acc.id} 域名数失败:`, e);
-            appState.accountZoneCounts[acc.id] = -1;
-          }
-          renderAccounts();
-        }));
-      }
-      
-      // 恢复原来的当前账户
-      if (appState.currentAccount) {
+
+      // 各账户独立统计，互不干扰（后端按 id 取对应 token，无共享状态竞争）
+      await Promise.all(appState.accounts.map(async acc => {
         try {
-          const token = await callBackend('get_account_token', { id: appState.currentAccount.id });
-          await callBackend('set_current_account', { account: appState.currentAccount, token });
+          const total = await callBackend('count_zones', { id: acc.id });
+          appState.accountZoneCounts[acc.id] = total;
         } catch (e) {
-          console.error('恢复当前账户失败:', e);
+          console.error(`加载账户 ${acc.id} 域名数失败:`, e);
+          appState.accountZoneCounts[acc.id] = -1;
         }
-      }
+        renderAccounts();
+      }));
     }
     window.loadAccountZoneCounts = loadAccountZoneCounts;
 
