@@ -157,6 +157,7 @@ pub fn run() {
             validate_token,
             get_app_version,
             update_account_avatar,
+            count_zones,
             save_account,
             list_accounts,
             get_account_token,
@@ -363,6 +364,36 @@ fn update_account_avatar(app: AppHandle, id: String, avatar: Option<String>) -> 
     store.set("accounts", serde_json::to_value(&accounts).map_err(|e| e.to_string())?);
     store.save().map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+async fn count_zones(app: AppHandle, id: String) -> Result<i64, String> {
+    let store = get_store(&app)?;
+    let accounts: Vec<Account> = store
+        .get("accounts")
+        .and_then(|v| serde_json::from_value(v).ok())
+        .unwrap_or_default();
+    let account = accounts
+        .iter()
+        .find(|a| a.id == id)
+        .ok_or("Account not found")?;
+    let token = decrypt_token(&account.token_encrypted)?;
+    // per_page=1 只需拿 result_info.total_count，一次请求得到精确总数（自动含分页）
+    let resp: CloudflareResponse<Vec<serde_json::Value>> =
+        cf_get(&token, "/zones?per_page=1").await?;
+    if !resp.success {
+        return Err(format!(
+            "Cloudflare API error: {}",
+            serde_json::to_string(&resp.errors).unwrap_or_default()
+        ));
+    }
+    let total = resp
+        .result_info
+        .as_ref()
+        .and_then(|i| i.get("total_count"))
+        .and_then(|v| v.as_i64())
+        .unwrap_or(resp.result.map(|r| r.len() as i64).unwrap_or(0));
+    Ok(total)
 }
 
 #[tauri::command]
