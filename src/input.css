@@ -369,3 +369,8 @@ input[type="password"]::-webkit-textfield-decoration-container,
 input[type="password"]::-webkit-credentials-auto-fill-button {
   display: none !important;
 }
+
+/* 侧边栏折叠时隐藏底部版本号与开源仓库链接 */
+.sidebar-collapsed .sidebar-footer {
+  display: none;
+}
