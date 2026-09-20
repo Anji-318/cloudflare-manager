@@ -35,10 +35,10 @@
       editingAccountId: null
     };
 
-    const APP_VERSION = '0.3.1';
+    const APP_VERSION = '0.3.3';
     const REPO_URL = 'https://github.com/Anji-318/cloudflare-manager/tree/main';
 
-    const pages = ['dashboard', 'accounts', 'zones', 'dns', 'workers', 'pages', 'r2', 'kvd1', 'tunnels', 'firewall', 'cache', 'analytics', 'settings'];
+    const pages = ['dashboard', 'accounts', 'zones', 'dns', 'workers', 'pages', 'r2', 'kvd1', 'tunnels', 'firewall', 'snippets', 'loadbalancer', 'healthchecks', 'cache', 'analytics', 'settings'];
     
     function showPage(pageId) {
       appState.currentPageId = pageId;
@@ -58,6 +58,9 @@
       if (pageId === 'kvd1') { loadKvNamespaces(); loadD1Databases(); }
       if (pageId === 'tunnels') loadTunnels();
       if (pageId === 'firewall') { loadFirewallRules(); loadFirewallStats(); }
+      if (pageId === 'snippets') loadSnippets();
+      if (pageId === 'loadbalancer') { loadLoadBalancers(); loadLbPools(); loadLbMonitors(); }
+      if (pageId === 'healthchecks') loadHealthChecks();
       if (pageId === 'analytics') loadAnalytics();
       if (pageId === 'cache') loadCacheSettings();
       if (pageId === 'dashboard') renderDashboard();
@@ -93,6 +96,12 @@
       appState.workersTotalRequests = null;
       appState.workersQuotaLimit = null;
       appState.workersRequestsError = null;
+      appState.snippets = null;
+      appState.snippetRules = null;
+      appState.lbList = null;
+      appState.lbPools = null;
+      appState.lbMonitors = null;
+      appState.healthChecks = null;
     }
 
     async function reloadCurrentPage() {
@@ -115,6 +124,9 @@
           case 'kvd1': await loadKvNamespaces(); await loadD1Databases(); break;
           case 'tunnels': await loadTunnels(); break;
           case 'firewall': await loadFirewallRules(); await loadFirewallStats(); break;
+          case 'snippets': await loadSnippets(); break;
+          case 'loadbalancer': await loadLoadBalancers(); await loadLbPools(); await loadLbMonitors(); break;
+          case 'healthchecks': await loadHealthChecks(); break;
           case 'cache': await loadCacheSettings(); break;
           case 'analytics': await loadAnalytics(); break;
           default: renderDashboard();
@@ -225,6 +237,8 @@
           icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>';
         }
       }
+      // 主题切换后刷新文字阴影颜色（深浅色用不同颜色的阴影）
+      if (typeof applyBgSettings === 'function') applyBgSettings();
     }
 
     function toggleTheme() {
@@ -234,6 +248,143 @@
     }
     window.toggleTheme = toggleTheme;
     window.applyTheme = applyTheme;
+
+    // ========== 自定义背景与前景调节 ==========
+    const BG_DEFAULTS = { image: '', blur: 0, brightness: 100, fgAlpha: 92, fgBrightness: 100 };
+
+    function loadBgSettings() {
+      try {
+        const saved = JSON.parse(localStorage.getItem('bgSettings') || '{}');
+        return { ...BG_DEFAULTS, ...saved };
+      } catch (e) {
+        return { ...BG_DEFAULTS };
+      }
+    }
+
+    function saveBgSettings(s) {
+      try {
+        localStorage.setItem('bgSettings', JSON.stringify(s));
+        return true;
+      } catch (e) {
+        alert('保存失败：图片过大超出本地存储上限，请换用更小的图片或改用 URL 方式');
+        return false;
+      }
+    }
+
+    function applyBgSettings() {
+      const s = loadBgSettings();
+      const root = document.documentElement;
+      root.style.setProperty('--bg-blur', (s.blur || 0) + 'px');
+      root.style.setProperty('--bg-brightness', (s.brightness || 100) + '%');
+      root.style.setProperty('--fg-alpha', ((s.fgAlpha != null ? s.fgAlpha : 92) / 100).toString());
+      root.style.setProperty('--fg-brightness', (s.fgBrightness || 100) + '%');
+      const bg = document.getElementById('app-background');
+      if (bg) {
+        const img = (s.image || '').replace(/["'\n\r]/g, '');
+        bg.style.backgroundImage = img ? `url("${img}")` : 'none';
+      }
+      applyAutoTextShadow(s.fgAlpha != null ? s.fgAlpha : 92);
+    }
+
+    // 前景透明度越低，文字对比越强：强制高对比文字色 + 加阴影（深色主题白字黑影 / 浅色主题黑字白影）
+    function applyAutoTextShadow(fgAlpha) {
+      const root = document.documentElement;
+      const threshold = 75; // 透明度高于此值（底色足够实）不启用增强
+      if (fgAlpha >= threshold) {
+        root.classList.remove('low-fg');
+        root.style.setProperty('--auto-text-shadow', 'none');
+        root.style.setProperty('--auto-svg-shadow', 'none');
+        return;
+      }
+      root.classList.add('low-fg');
+      const strength = Math.min(1, (threshold - fgAlpha) / threshold * 1.6).toFixed(2);
+      const isDark = root.classList.contains('dark');
+      const color = isDark ? `2,6,23,${strength}` : `255,255,255,${strength}`;
+      root.style.setProperty('--auto-text-shadow', `0 0 3px rgba(${color}), 0 2px 8px rgba(${color})`);
+      root.style.setProperty('--auto-svg-shadow', `drop-shadow(0 1px 3px rgba(${color}))`);
+    }
+
+    function updateBgSettingLabels() {
+      const s = loadBgSettings();
+      const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+      setText('bg-blur-val', (s.blur || 0) + 'px');
+      setText('bg-brightness-val', (s.brightness || 100) + '%');
+      setText('fg-alpha-val', (s.fgAlpha != null ? s.fgAlpha : 92) + '%');
+      setText('fg-brightness-val', (s.fgBrightness || 100) + '%');
+      setText('bg-image-status', s.image ? '已设置背景图片' : '未设置背景');
+    }
+
+    function syncBgSettingsUI() {
+      const s = loadBgSettings();
+      const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+      setVal('bg-blur-slider', s.blur || 0);
+      setVal('bg-brightness-slider', s.brightness || 100);
+      setVal('fg-alpha-slider', s.fgAlpha != null ? s.fgAlpha : 92);
+      setVal('fg-brightness-slider', s.fgBrightness || 100);
+      updateBgSettingLabels();
+    }
+
+    function setBgSetting(key, value) {
+      const s = loadBgSettings();
+      s[key] = value;
+      if (!saveBgSettings(s)) return;
+      applyBgSettings();
+      updateBgSettingLabels();
+    }
+    window.setBgSetting = setBgSetting;
+
+    // 本地图片：过大时压缩到 1920px JPEG，避免超出 localStorage 上限
+    function onBgFilePicked(input) {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result;
+        input.value = '';
+        if (typeof dataUrl === 'string' && dataUrl.length > 3.5 * 1024 * 1024) {
+          const img = new Image();
+          img.onload = () => {
+            const scale = Math.min(1, 1920 / Math.max(img.width, img.height));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(img.width * scale));
+            canvas.height = Math.max(1, Math.round(img.height * scale));
+            canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+            setBgSetting('image', canvas.toDataURL('image/jpeg', 0.85));
+          };
+          img.onerror = () => alert('图片解析失败，请换一张图片');
+          img.src = dataUrl;
+        } else {
+          setBgSetting('image', dataUrl);
+        }
+      };
+      reader.onerror = () => { input.value = ''; alert('读取图片失败'); };
+      reader.readAsDataURL(file);
+    }
+    window.onBgFilePicked = onBgFilePicked;
+
+    function applyBgUrl() {
+      const input = document.getElementById('bg-url-input');
+      const url = input ? input.value.trim() : '';
+      if (!url) { alert('请输入图片 URL'); return; }
+      setBgSetting('image', url);
+    }
+    window.applyBgUrl = applyBgUrl;
+
+    function clearBgImage() {
+      const input = document.getElementById('bg-url-input');
+      if (input) input.value = '';
+      setBgSetting('image', '');
+    }
+    window.clearBgImage = clearBgImage;
+
+    function resetBgSettings() {
+      const input = document.getElementById('bg-url-input');
+      if (input) input.value = '';
+      saveBgSettings({ ...BG_DEFAULTS });
+      applyBgSettings();
+      syncBgSettingsUI();
+    }
+    window.resetBgSettings = resetBgSettings;
 
     function openAddAccount() {
       document.getElementById('modal-add-account').classList.remove('hidden');
@@ -322,12 +473,15 @@
         appState.accounts = await callBackend('list_accounts');
         renderAccounts();
         renderDashboard();
-        
-        // Auto-select first account if none selected
+
+        // 无选中账户时，优先恢复上次使用的账户（如页面刷新后），避免自动跳回第一个账户
         if (appState.accounts.length > 0 && !appState.currentAccount) {
-          await selectAccount(appState.accounts[0].id);
+          let restoreId = null;
+          try { restoreId = localStorage.getItem('currentAccountId'); } catch (e) {}
+          const restored = restoreId ? appState.accounts.find(a => a.id === restoreId) : null;
+          await selectAccount((restored || appState.accounts[0]).id);
         }
-        
+
         // 异步加载每个账户的域名数
         loadAccountZoneCounts();
       } catch (e) {
@@ -577,6 +731,7 @@
           clearAccountData();
           try { await callBackend('clear_current_account'); } catch (e) { console.error(e); }
         }
+        try { if (localStorage.getItem('currentAccountId') === id) localStorage.removeItem('currentAccountId'); } catch (e) {}
         await loadAccounts();
       } catch (e) {
         alert('删除失败：' + e);
@@ -690,6 +845,7 @@
         const token = await callBackend('get_account_token', { id });
         await callBackend('set_current_account', { account, token });
         appState.currentAccount = account;
+        try { localStorage.setItem('currentAccountId', id); } catch (e) {}
         
         // Update sidebar
         const info = document.querySelector('.account-info');
@@ -1127,6 +1283,16 @@
         } else if (appState.workersTotalRequests != null) {
           // 成功状态
           reqCountEl.textContent = appState.workersTotalRequests.toLocaleString();
+          const reqLabel = document.getElementById('dash-req-label');
+          if (reqLabel) {
+            const pad = n => String(n).padStart(2, '0');
+            let updated = '';
+            if (appState.workersRequestsUpdatedAt) {
+              const t = new Date(appState.workersRequestsUpdatedAt);
+              updated = `，更新于 ${pad(t.getHours())}:${pad(t.getMinutes())}`;
+            }
+            reqLabel.title = `统计范围：UTC 今日 00:00（北京时间 08:00）至当前时刻${updated}\n分析数据入库延迟约 15-60 分钟，数字通常略低于 CF 面板，稍后会逐步追上`;
+          }
           if (quotaEl && appState.workersQuotaLimit) {
             const pct = Math.round(appState.workersTotalRequests / appState.workersQuotaLimit * 100);
             quotaEl.textContent = `/ ${appState.workersQuotaLimit.toLocaleString()}`;
@@ -1298,12 +1464,12 @@
       }
       
       const accountId = appState.currentAccount.account_id;
-      
-      // 使用 UTC 时间今日0点，与 Cloudflare 官网保持一致
+
+      // CF 面板"今天的请求"按 UTC 零点起算（账户默认时区为 UTC），与官网保持一致
       const now = new Date();
       const todayUtc = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0));
       const since = todayUtc.toISOString();
-      const until = new Date().toISOString();
+      const until = now.toISOString();
       
       console.log('Workers query range:', since, 'to', until);
       
@@ -1357,6 +1523,7 @@
         
         appState.workersTotalRequests = totalRequests;
         appState.workersRequestsError = null;
+        appState.workersRequestsUpdatedAt = Date.now();
         
       } catch (e) {
         console.error('Workers analytics load failed:', e);
@@ -1600,9 +1767,9 @@
       return { code, metadata, metadataText };
     }
 
-    function buildWorkerMultipart(code, metadataObj) {
+    function buildWorkerMultipart(code, metadataObj, fileName = 'worker.js') {
       const boundary = '----WorkerBoundary' + Math.random().toString(36).slice(2);
-      const metadata = JSON.stringify(metadataObj || { main_module: 'worker.js' });
+      const metadata = JSON.stringify(metadataObj || { main_module: fileName });
       return {
         body: [
           `--${boundary}`,
@@ -1610,7 +1777,7 @@
           '',
           metadata,
           `--${boundary}`,
-          'Content-Disposition: form-data; name="worker.js"; filename="worker.js"',
+          `Content-Disposition: form-data; name="${fileName}"; filename="${fileName}"`,
           'Content-Type: application/javascript+module',
           '',
           code,
@@ -1844,12 +2011,25 @@
     function openPagesDeployModal(projectName) {
       document.getElementById('pages-deploy-project').value = projectName;
       document.getElementById('pages-deploy-dir').value = '';
+      document.getElementById('pages-deploy-zip').value = '';
+      const wranglerDir = document.getElementById('pages-deploy-wrangler-dir');
+      const wranglerCmd = document.getElementById('pages-deploy-wrangler-cmd');
+      const wranglerArgs = document.getElementById('pages-deploy-wrangler-args');
+      const wranglerOutdir = document.getElementById('pages-deploy-wrangler-outdir');
+      if (wranglerDir) wranglerDir.value = '';
+      if (wranglerCmd) wranglerCmd.value = 'pages deploy';
+      if (wranglerArgs) wranglerArgs.value = '';
+      if (wranglerOutdir) wranglerOutdir.value = '';
+      onWranglerCmdChange();
       document.getElementById('pages-deploy-branch').value = 'main';
       document.getElementById('pages-deploy-env').value = 'production';
+      document.getElementById('pages-deploy-mode').value = 'dir';
+      switchPagesDeployTab('dir');
       appState.pagesDeployEnvVars = [];
       renderPagesDeployEnvVars();
       document.getElementById('pages-deploy-log').classList.add('hidden');
       document.getElementById('pages-deploy-log').textContent = '';
+      updateZipProgress(0, '等待开始');
       document.getElementById('modal-pages-deploy').classList.remove('hidden');
     }
     window.openPagesDeployModal = openPagesDeployModal;
@@ -1858,6 +2038,53 @@
       document.getElementById('modal-pages-deploy').classList.add('hidden');
     }
     window.closePagesDeployModal = closePagesDeployModal;
+
+    function switchPagesDeployTab(mode) {
+      document.getElementById('pages-deploy-mode').value = mode;
+      const dirPanel = document.getElementById('pages-deploy-dir-panel');
+      const wranglerPanel = document.getElementById('pages-deploy-wrangler-panel');
+      const zipPanel = document.getElementById('pages-deploy-zip-panel');
+      const dirTab = document.getElementById('pages-tab-dir');
+      const wranglerTab = document.getElementById('pages-tab-wrangler');
+      const zipTab = document.getElementById('pages-tab-zip');
+
+      function setActive(tab, panel) {
+        tab.classList.remove('bg-slate-100', 'dark:bg-slate-800', 'text-slate-600', 'dark:text-slate-300');
+        tab.classList.add('bg-cf-orange', 'text-white');
+        panel.classList.remove('hidden');
+      }
+      function setInactive(tab, panel) {
+        tab.classList.remove('bg-cf-orange', 'text-white');
+        tab.classList.add('bg-slate-100', 'dark:bg-slate-800', 'text-slate-600', 'dark:text-slate-300');
+        panel.classList.add('hidden');
+      }
+
+      [dirTab, wranglerTab, zipTab].forEach(t => t.classList.remove('bg-cf-orange', 'text-white', 'bg-slate-100', 'dark:bg-slate-800', 'text-slate-600', 'dark:text-slate-300'));
+      [dirPanel, wranglerPanel, zipPanel].forEach(p => p.classList.add('hidden'));
+
+      if (mode === 'zip') {
+        setActive(zipTab, zipPanel);
+        setInactive(dirTab, dirPanel);
+        setInactive(wranglerTab, wranglerPanel);
+      } else if (mode === 'wrangler') {
+        setActive(wranglerTab, wranglerPanel);
+        setInactive(dirTab, dirPanel);
+        setInactive(zipTab, zipPanel);
+      } else {
+        setActive(dirTab, dirPanel);
+        setInactive(wranglerTab, wranglerPanel);
+        setInactive(zipTab, zipPanel);
+      }
+    }
+    window.switchPagesDeployTab = switchPagesDeployTab;
+
+    function updateZipProgress(percent, text) {
+      const bar = document.getElementById('pages-deploy-zip-progress');
+      const status = document.getElementById('pages-deploy-zip-status');
+      if (bar) bar.style.width = percent + '%';
+      if (status) status.textContent = text;
+    }
+    window.updateZipProgress = updateZipProgress;
 
     function renderPagesDeployEnvVars() {
       const container = document.getElementById('pages-deploy-env-list');
@@ -1910,6 +2137,18 @@
     }
     window.togglePagesDeployEnvSecret = togglePagesDeployEnvSecret;
 
+    async function deployPages() {
+      const mode = document.getElementById('pages-deploy-mode').value || 'dir';
+      if (mode === 'zip') {
+        await deployPagesZip();
+      } else if (mode === 'wrangler') {
+        await deployPagesWrangler();
+      } else {
+        await deployPagesLocal();
+      }
+    }
+    window.deployPages = deployPages;
+
     async function deployPagesLocal() {
       const projectName = document.getElementById('pages-deploy-project').value;
       const directory = document.getElementById('pages-deploy-dir').value.trim();
@@ -1945,6 +2184,86 @@
       }
     }
     window.deployPagesLocal = deployPagesLocal;
+
+    async function deployPagesZip() {
+      const projectName = document.getElementById('pages-deploy-project').value;
+      const zipPath = document.getElementById('pages-deploy-zip').value.trim();
+      if (!zipPath) {
+        alert('请输入 ZIP 压缩包路径');
+        return;
+      }
+      const logEl = document.getElementById('pages-deploy-log');
+      const btn = document.getElementById('pages-deploy-btn');
+      logEl.classList.remove('hidden');
+      logEl.textContent = '正在通过 Cloudflare Direct Upload API 部署 ZIP...';
+      updateZipProgress(10, '正在解析压缩包...');
+      btn.disabled = true;
+      btn.classList.add('opacity-50', 'cursor-not-allowed');
+      try {
+        updateZipProgress(30, '正在上传文件...');
+        const result = await callBackend('deploy_pages_zip', {
+          project_name: projectName,
+          zipPath
+        });
+        updateZipProgress(100, '部署完成');
+        logEl.textContent = '部署成功：' + JSON.stringify(result, null, 2);
+      } catch (e) {
+        updateZipProgress(0, '部署失败');
+        logEl.textContent = '部署失败：' + e;
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('opacity-50', 'cursor-not-allowed');
+      }
+    }
+    window.deployPagesZip = deployPagesZip;
+
+    async function deployPagesWrangler() {
+      const projectDir = document.getElementById('pages-deploy-wrangler-dir').value.trim();
+      const cmd = document.getElementById('pages-deploy-wrangler-cmd').value.trim();
+      const outDirEl = document.getElementById('pages-deploy-wrangler-outdir');
+      const outDir = outDirEl ? outDirEl.value.trim() : '';
+      const extraArgs = document.getElementById('pages-deploy-wrangler-args').value.trim();
+      if (!projectDir) {
+        alert('请输入 Wrangler 项目目录');
+        return;
+      }
+      if (!cmd) {
+        alert('请选择 Wrangler 命令');
+        return;
+      }
+      // 构建输出目录为可选：wrangler.toml 配了 pages_build_output_dir 或自动探测成功时不填也行，
+      // 最终由后端校验并给出明确提示
+      const isPages = cmd.startsWith('pages');
+      const logEl = document.getElementById('pages-deploy-log');
+      const btn = document.getElementById('pages-deploy-btn');
+      logEl.classList.remove('hidden');
+      logEl.textContent = `正在项目目录执行 wrangler ${cmd}${outDir ? ' ' + outDir : ''} ...`;
+      btn.disabled = true;
+      btn.classList.add('opacity-50', 'cursor-not-allowed');
+      try {
+        const result = await callBackend('deploy_pages_wrangler', {
+          projectDir,
+          cmd,
+          outDir,
+          extraArgs
+        });
+        logEl.textContent = result;
+      } catch (e) {
+        logEl.textContent = '部署失败：' + e;
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('opacity-50', 'cursor-not-allowed');
+      }
+    }
+    window.deployPagesWrangler = deployPagesWrangler;
+
+    function onWranglerCmdChange() {
+      const cmd = document.getElementById('pages-deploy-wrangler-cmd').value;
+      const wrap = document.getElementById('pages-deploy-wrangler-outdir-wrap');
+      const isPages = cmd.startsWith('pages');
+      if (wrap) wrap.classList.toggle('hidden', !isPages);
+    }
+    window.onWranglerCmdChange = onWranglerCmdChange;
 
     // ==================== Worker 路由与域名管理 ====================
     async function openWorkerRoutes(name) {
@@ -2431,19 +2750,36 @@
     }
 
     async function loadFirewallRules() {
-      if (!appState.currentZone) {
-        renderFirewallRules([]);
+      const tbody = document.getElementById('firewall-tbody');
+      if (tbody) tbody.innerHTML = tableLoadingRow(5);
+      const zoneId = await ensureZoneForPage('firewall-zone-select');
+      if (!zoneId) {
+        if (tbody) tbody.innerHTML = tableEmptyRow(5, '请先选择域名');
         return;
       }
       try {
-        const result = await cfRequest('GET', `/zones/${appState.currentZone.id}/firewall/rules`);
-        appState.firewallRules = result.success ? (result.result || []) : [];
-        renderFirewallRules();
+        // 优先使用 Rulesets API（WAF Custom Rules）
+        const ruleset = await cfGetRulesetEntrypoint(`/zones/${zoneId}`, 'http_request_firewall_custom');
+        if (ruleset && Array.isArray(ruleset.rules)) {
+          appState.firewallRules = ruleset.rules.map(r => ({ ...r, _ruleset_id: ruleset.id }));
+        } else {
+          // 回退：旧版 Firewall Rules API
+          const result = await cfRequest('GET', `/zones/${zoneId}/firewall/rules`);
+          appState.firewallRules = (result.success ? (result.result || []) : []).map(r => ({ ...r, _legacy: true }));
+        }
       } catch (e) {
         console.error('Firewall load failed:', e);
-        renderFirewallRules([]);
+        appState.firewallRules = [];
       }
+      renderFirewallRules();
     }
+
+    function onFirewallZoneChange() {
+      handleZoneSelectChange('firewall-zone-select');
+      loadFirewallRules();
+      loadFirewallStats();
+    }
+    window.onFirewallZoneChange = onFirewallZoneChange;
 
     async function loadFirewallStats() {
       const threatEl = document.getElementById('fw-threat-count');
@@ -2465,15 +2801,35 @@
         const ipResult = await cfRequest('GET', `/zones/${appState.currentZone.id}/firewall/access_rules/rules`);
         if (ipRuleEl) ipRuleEl.textContent = ipResult.success ? (ipResult.result || []).length : '-';
         
-        // Load threat count from analytics
-        const until = new Date();
-        const since = new Date(until.getTime() - 86400 * 1000);
-        const analyticsResult = await cfRequest('GET', `/zones/${appState.currentZone.id}/analytics/dashboard?since=${since.toISOString()}&until=${until.toISOString()}`);
-        if (threatEl && analyticsResult.success) {
-          const timeseries = analyticsResult.result?.timeseries || [];
-          let threats = 0;
-          timeseries.forEach(p => { threats += p.requests?.threat || 0; });
-          threatEl.textContent = threats.toLocaleString();
+        // Load threat count from GraphQL（旧 REST /analytics/dashboard 已弃用）
+        if (threatEl) {
+          threatEl.textContent = '-';
+          try {
+            const until = new Date();
+            const since = new Date(until.getTime() - 86400 * 1000);
+            const query = `query ZoneThreats($zoneTag: String!, $since: Time!, $until: Time!) {
+              viewer {
+                zones(filter: { zoneTag: $zoneTag }) {
+                  httpRequestsAdaptiveGroups(limit: 10000, filter: { datetime_geq: $since, datetime_leq: $until }) {
+                    sum { threats }
+                  }
+                }
+              }
+            }`;
+            const data = await cfGraphQL(query, {
+              zoneTag: appState.currentZone.id,
+              since: since.toISOString(),
+              until: until.toISOString()
+            });
+            const zones = data?.viewer?.zones || [];
+            let threats = 0;
+            zones.forEach(z => {
+              (z.httpRequestsAdaptiveGroups || []).forEach(g => { threats += (g.sum && g.sum.threats) || 0; });
+            });
+            threatEl.textContent = threats.toLocaleString();
+          } catch (e2) {
+            console.warn('Threat count GraphQL failed:', e2);
+          }
         }
       } catch (e) {
         console.error('Firewall stats load failed:', e);
@@ -2489,19 +2845,86 @@
         return;
       }
       tbody.innerHTML = rules.map(r => {
-        const actionClass = r.action === 'block' ? 'bg-red-500/10 text-red-500' : r.action === 'challenge' ? 'bg-yellow-500/10 text-yellow-500' : 'bg-green-500/10 text-green-500';
-        const statusClass = r.paused ? 'bg-slate-500/10 text-slate-400' : 'bg-green-500/10 text-green-500';
+        const action = r.action || '-';
+        const actionClass = action === 'block' ? 'bg-red-500/10 text-red-500' : (action === 'managed_challenge' || action === 'challenge' || action === 'js_challenge') ? 'bg-yellow-500/10 text-yellow-500' : 'bg-green-500/10 text-green-500';
+        const enabled = r.enabled !== false && !r.paused;
+        const statusClass = enabled ? 'bg-green-500/10 text-green-500' : 'bg-slate-500/10 text-slate-400';
         return `
           <tr class=\"hover:bg-slate-100/30 dark:hover:bg-slate-800/30 transition-colors\">
             <td class=\"px-5 py-4 font-medium\">${escapeHtml(r.description || '未命名规则')}</td>
-            <td class=\"px-5 py-4 text-slate-400\">Firewall Rule</td>
-            <td class=\"px-5 py-4\"><span class=\"px-2 py-1 rounded-full text-xs ${actionClass}\">${escapeHtml(r.action || '-')}</span></td>
-            <td class=\"px-5 py-4\"><span class=\"px-2 py-1 rounded-full text-xs ${statusClass}\">${r.paused ? '暂停' : '启用'}</span></td>
-            <td class=\"px-5 py-4\"><button class=\"text-cf-blue hover:underline text-xs\">编辑</button></td>
+            <td class=\"px-5 py-4 text-slate-400 truncate max-w-xs font-mono text-xs\">${escapeHtml(r.expression || '')}</td>
+            <td class=\"px-5 py-4\"><span class=\"px-2 py-1 rounded-full text-xs ${actionClass}\">${escapeHtml(action)}</span></td>
+            <td class=\"px-5 py-4\"><span class=\"px-2 py-1 rounded-full text-xs ${statusClass}\">${enabled ? '启用' : '暂停'}</span></td>
+            <td class=\"px-5 py-4\">
+              ${renderEnabledToggle(`toggleFirewallRule('${jsArg(r.id)}', ${!enabled})`, enabled)}
+              <button onclick=\"deleteFirewallRule('${jsArg(r.id)}')\" class=\"text-red-400 hover:underline text-xs ml-3\">删除</button>
+            </td>
           </tr>
         `;
       }).join('');
     }
+
+    async function addFirewallRule() {
+      const zoneId = appState.currentZone && appState.currentZone.id;
+      if (!zoneId) { alert('请先选择一个域名'); return; }
+      const description = prompt('规则描述：', '新的防火墙规则');
+      if (description === null) return;
+      const expression = prompt('匹配表达式（WAF 表达式）：', '(ip.src eq 1.2.3.4)');
+      if (expression === null) return;
+      const action = prompt('动作（block / challenge / js_challenge / managed_challenge / log）：', 'block');
+      if (action === null) return;
+      const body = { description, expression, action: action.trim() };
+      try {
+        const ruleset = await cfGetRulesetEntrypoint(`/zones/${zoneId}`, 'http_request_firewall_custom');
+        await cfAddRulesetRule(`/zones/${zoneId}`, 'http_request_firewall_custom', ruleset, body);
+        await loadFirewallRules();
+        await loadFirewallStats();
+      } catch (e) {
+        alert('添加失败: ' + e);
+      }
+    }
+    window.addFirewallRule = addFirewallRule;
+
+    async function toggleFirewallRule(ruleId, enabled) {
+      const zoneId = appState.currentZone && appState.currentZone.id;
+      const rule = (appState.firewallRules || []).find(r => r.id === ruleId);
+      if (!zoneId || !rule) return;
+      try {
+        if (rule._ruleset_id) {
+          const result = await cfRequest('PATCH', `/zones/${zoneId}/rulesets/${rule._ruleset_id}/rules/${ruleId}`, { enabled });
+          if (!result.success) { alert(cfRuleError(result)); return; }
+        } else {
+          const result = await cfRequest('PATCH', `/zones/${zoneId}/firewall/rules/${ruleId}`, { paused: !enabled });
+          if (!result.success) { alert(cfRuleError(result)); return; }
+        }
+        await loadFirewallRules();
+        await loadFirewallStats();
+      } catch (e) {
+        alert('切换状态失败: ' + e);
+      }
+    }
+    window.toggleFirewallRule = toggleFirewallRule;
+
+    async function deleteFirewallRule(ruleId) {
+      const zoneId = appState.currentZone && appState.currentZone.id;
+      const rule = (appState.firewallRules || []).find(r => r.id === ruleId);
+      if (!zoneId || !rule) return;
+      if (!confirm('确定要删除这条防火墙规则吗？')) return;
+      try {
+        if (rule._ruleset_id) {
+          const result = await cfRequest('DELETE', `/zones/${zoneId}/rulesets/${rule._ruleset_id}/rules/${ruleId}`);
+          if (!result.success) { alert(cfRuleError(result)); return; }
+        } else {
+          const result = await cfRequest('DELETE', `/zones/${zoneId}/firewall/rules/${ruleId}`);
+          if (!result.success) { alert(cfRuleError(result)); return; }
+        }
+        await loadFirewallRules();
+        await loadFirewallStats();
+      } catch (e) {
+        alert('删除失败: ' + e);
+      }
+    }
+    window.deleteFirewallRule = deleteFirewallRule;
 
     // 侧边栏折叠
     let sidebarCollapsed = false;
@@ -2595,10 +3018,10 @@
       }
       tbody.innerHTML = keys.map(k => `
         <tr class="hover:bg-slate-100/30 dark:hover:bg-slate-800/30 transition-colors">
-          <td class="px-4 py-3 font-mono text-xs">${escapeHtml(k.name || '')}</td>
+          <td class="px-4 py-3 font-mono text-xs break-all">${escapeHtml(k.name || '')}</td>
           <td class="px-4 py-3 text-slate-400 text-xs truncate max-w-[200px]">${escapeHtml(k.value_preview || '-')}</td>
-          <td class="px-4 py-3 text-slate-400 text-xs">${k.expiration ? new Date(k.expiration * 1000).toLocaleString() : '永久'}</td>
-          <td class="px-4 py-3 text-slate-400 text-xs">${k.metadata ? JSON.stringify(k.metadata).length + ' B' : '-'}</td>
+          <td class="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">${k.expiration ? new Date(k.expiration * 1000).toLocaleString() : '永久'}</td>
+          <td class="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">${k.metadata ? JSON.stringify(k.metadata).length + ' B' : '-'}</td>
           <td class="px-4 py-3">
             <button onclick="editKvKey('${escapeHtml(k.name || '')}')" class="text-cf-blue hover:underline text-xs mr-2">编辑</button>
             <button onclick="deleteKvKey('${escapeHtml(k.name || '')}')" class="text-red-400 hover:underline text-xs">删除</button>
@@ -2880,8 +3303,8 @@
           if (r.results && Array.isArray(r.results) && r.results.length > 0) {
             const cols = Object.keys(r.results[0]);
             html += `<div class="mb-4"><div class="text-xs text-slate-500 mb-2">结果 ${idx + 1} (${r.results.length} 行)</div>`;
-            html += '<table class="w-full text-xs"><thead class="bg-slate-800 text-slate-300"><tr>' + cols.map(c => `<th class="text-left px-2 py-1">${escapeHtml(c)}</th>`).join('') + '</tr></thead><tbody class="divide-y divide-slate-700">';
-            html += r.results.map(row => '<tr>' + cols.map(c => `<td class="px-2 py-1 text-slate-300">${escapeHtml(String(row[c] ?? ''))}</td>`).join('') + '</tr>').join('');
+            html += '<table class="w-full text-xs"><thead class="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300"><tr>' + cols.map(c => `<th class="text-left px-2 py-1">${escapeHtml(c)}</th>`).join('') + '</tr></thead><tbody class="divide-y divide-slate-200 dark:divide-slate-700">';
+            html += r.results.map(row => '<tr>' + cols.map(c => `<td class="px-2 py-1 text-slate-700 dark:text-slate-300">${escapeHtml(String(row[c] ?? ''))}</td>`).join('') + '</tr>').join('');
             html += '</tbody></table></div>';
           } else {
             html += `<div class="text-sm text-slate-500 mb-2">结果 ${idx + 1}: ${r.success === false ? '失败' : '成功'} (${r.meta?.rows_read || 0} 行读取, ${r.meta?.rows_written || 0} 行写入)</div>`;
@@ -2920,18 +3343,26 @@
     function renderD1TableData(result) {
       const tbody = document.getElementById('d1-data-tbody');
       const thead = document.getElementById('d1-data-thead');
+      const headCols = document.getElementById('d1-data-head-cols');
+      const bodyCols = document.getElementById('d1-data-body-cols');
       if (!tbody) return;
       appState.d1CurrentRows = (result.result && result.result[0] && result.result[0].results) ? result.result[0].results : [];
+      const opCol = '<col style="width:110px">';
       if (appState.d1CurrentRows.length === 0) {
         if (thead) thead.innerHTML = '<tr><th class="text-left px-3 py-2">操作</th></tr>';
+        if (headCols) headCols.innerHTML = opCol;
+        if (bodyCols) bodyCols.innerHTML = opCol;
         tbody.innerHTML = '<tr><td class="px-5 py-8 text-center text-slate-500">暂无数据</td></tr>';
         return;
       }
       const cols = Object.keys(appState.d1CurrentRows[0]);
+      const dataCols = cols.map(() => '<col>').join('');
+      if (headCols) headCols.innerHTML = dataCols + opCol;
+      if (bodyCols) bodyCols.innerHTML = dataCols + opCol;
       if (thead) {
         thead.innerHTML = '<tr>' + cols.map(c => `<th class="text-left px-3 py-2 font-medium">${escapeHtml(c)}</th>`).join('') + '<th class="text-left px-3 py-2 font-medium">操作</th></tr>';
       }
-      tbody.innerHTML = appState.d1CurrentRows.map((row, idx) => '<tr>' + cols.map(c => `<td class="px-3 py-2 text-slate-300">${escapeHtml(String(row[c] ?? ''))}</td>`).join('') + `<td class="px-3 py-2"><button onclick="editD1Row(${idx})" class="text-cf-blue hover:underline text-xs mr-2">编辑</button><button onclick="deleteD1Row(${idx})" class="text-red-400 hover:underline text-xs">删除</button></td></tr>`).join('');
+      tbody.innerHTML = appState.d1CurrentRows.map((row, idx) => '<tr>' + cols.map(c => `<td class="px-3 py-2 text-slate-700 dark:text-slate-300 break-all">${escapeHtml(String(row[c] ?? ''))}</td>`).join('') + `<td class="px-3 py-2"><button onclick="editD1Row(${idx})" class="text-cf-blue hover:underline text-xs mr-2">编辑</button><button onclick="deleteD1Row(${idx})" class="text-red-400 hover:underline text-xs">删除</button></td></tr>`).join('');
     }
 
     async function refreshD1Data() {
@@ -3054,6 +3485,676 @@
       activeBtn.classList.add('bg-cf-blue/10', 'text-cf-blue', 'hover:bg-cf-blue/20');
     }
 
+    // ========== 新增功能页通用辅助 ==========
+    function isCfNotFoundError(e) {
+      const msg = String((e && e.message) || e);
+      return msg.includes('HTTP 404') || msg.includes('could not find') || msg.includes('10001') || msg.includes('not find') || msg.includes('not found');
+    }
+
+    function cfRuleError(result) {
+      const errs = (result && result.errors) || [];
+      return '操作失败：' + (errs.map(e => (e && (e.message || e.code)) || '').join('; ') || '未知错误');
+    }
+
+    function jsArg(s) {
+      return escapeHtml(String(s == null ? '' : s)).replace(/'/g, '&#39;');
+    }
+
+    // 确保 appState.zones 已加载，并把 zone select 填充好；返回选中的 zoneId
+    async function ensureZoneForPage(selectId) {
+      if (!appState.currentAccount) {
+        alert('请先选择或添加一个账户');
+        return null;
+      }
+      if (!appState.zones || appState.zones.length === 0) {
+        await loadZones();
+        if (!appState.zones || appState.zones.length === 0) return null;
+      }
+      const sel = document.getElementById(selectId);
+      if (!sel) return (appState.currentZone && appState.currentZone.id) || null;
+      sel.innerHTML = '<option value="">选择域名</option>' + appState.zones.map(z =>
+        `<option value="${escapeHtml(z.id)}">${escapeHtml(z.name || '')}</option>`).join('');
+      let zoneId = (appState.currentZone && appState.currentZone.id) || '';
+      if (!zoneId || !appState.zones.some(z => z.id === zoneId)) {
+        zoneId = appState.zones[0].id;
+      }
+      sel.value = zoneId;
+      const zone = appState.zones.find(z => z.id === zoneId);
+      appState.currentZone = { id: zone.id, name: zone.name };
+      return zoneId;
+    }
+
+    function handleZoneSelectChange(selectId) {
+      const sel = document.getElementById(selectId);
+      const zone = (appState.zones || []).find(z => z.id === sel.value);
+      if (zone) appState.currentZone = { id: zone.id, name: zone.name };
+    }
+
+    // Ruleset entrypoint 获取；404 / 无 entrypoint 返回 null
+    async function cfGetRulesetEntrypoint(scopePath, phase) {
+      try {
+        const result = await cfRequest('GET', `${scopePath}/rulesets/phases/${phase}/entrypoint`);
+        if (result && result.success) return result.result || null;
+        return null;
+      } catch (e) {
+        if (isCfNotFoundError(e)) return null;
+        throw e;
+      }
+    }
+
+    // 向 ruleset 添加规则；没有 ruleset 时用 PUT entrypoint 创建第一个规则
+    async function cfAddRulesetRule(scopePath, phase, ruleset, ruleBody) {
+      if (ruleset && ruleset.id) {
+        const result = await cfRequest('POST', `${scopePath}/rulesets/${ruleset.id}/rules`, ruleBody);
+        if (!result.success) throw new Error(cfRuleError(result));
+      } else {
+        const result = await cfRequest('PUT', `${scopePath}/rulesets/phases/${phase}/entrypoint`, { rules: [ruleBody] });
+        if (!result.success) throw new Error(cfRuleError(result));
+      }
+    }
+
+    function renderEnabledToggle(onclick, enabled) {
+      return enabled ?
+        `<button onclick="${onclick}" class="w-10 h-5 rounded-full bg-cf-orange relative transition-colors hover:opacity-90"><div class="absolute right-1 top-1 w-3 h-3 rounded-full bg-white shadow"></div></button>` :
+        `<button onclick="${onclick}" class="w-10 h-5 rounded-full bg-slate-400 relative transition-colors hover:opacity-90"><div class="absolute left-1 top-1 w-3 h-3 rounded-full bg-white shadow"></div></button>`;
+    }
+
+    function tableLoadingRow(colspan, text) {
+      return `<tr><td colspan="${colspan}" class="px-5 py-8 text-center text-slate-500">${escapeHtml(text || '加载中...')}</td></tr>`;
+    }
+
+    function tableEmptyRow(colspan, text) {
+      return `<tr><td colspan="${colspan}" class="px-5 py-8 text-center text-slate-500">${escapeHtml(text || '暂无数据')}</td></tr>`;
+    }
+
+    // ========== 3. Snippets ==========
+    async function loadSnippets() {
+      const tbody = document.getElementById('snippets-tbody');
+      if (!tbody) return;
+      tbody.innerHTML = tableLoadingRow(3);
+      const zoneId = await ensureZoneForPage('snippets-zone-select');
+      if (!zoneId) { tbody.innerHTML = tableEmptyRow(3, '请先选择域名'); return; }
+      try {
+        const result = await cfRequest('GET', `/zones/${zoneId}/snippets`);
+        let snippets = [];
+        if (result.success) {
+          const r = result.result;
+          snippets = Array.isArray(r) ? r : (Array.isArray(r && r.snippets) ? r.snippets : []);
+        }
+        appState.snippets = snippets;
+      } catch (e) {
+        console.error('load snippets failed:', e);
+        alert('加载 Snippets 失败: ' + e);
+        appState.snippets = [];
+      }
+      try {
+        const rulesResult = await cfRequest('GET', `/zones/${zoneId}/snippets/snippet_rules`);
+        const r = rulesResult.success ? rulesResult.result : null;
+        appState.snippetRules = Array.isArray(r) ? r : ((r && Array.isArray(r.rules)) ? r.rules : []);
+      } catch (e) {
+        console.warn('load snippet rules failed:', e);
+        appState.snippetRules = [];
+      }
+      renderSnippets();
+    }
+    window.loadSnippets = loadSnippets;
+
+    function onSnippetsZoneChange() {
+      handleZoneSelectChange('snippets-zone-select');
+      loadSnippets();
+    }
+    window.onSnippetsZoneChange = onSnippetsZoneChange;
+
+    function renderSnippets() {
+      const tbody = document.getElementById('snippets-tbody');
+      if (!tbody) return;
+      const snippets = appState.snippets || [];
+      const rules = appState.snippetRules || [];
+      if (snippets.length === 0) {
+        tbody.innerHTML = tableEmptyRow(3, '暂无 Snippets');
+        return;
+      }
+      tbody.innerHTML = snippets.map(s => {
+        const name = s.name || s.snippet_name || '';
+        const ruleCount = rules.filter(r => {
+          const rn = r.script_name || r.snippet_name || (r.action_parameters && r.action_parameters.script_name) || '';
+          return rn === name;
+        }).length;
+        return `
+          <tr class="hover:bg-slate-100/30 dark:hover:bg-slate-800/30 transition-colors">
+            <td class="px-5 py-4 font-medium font-mono text-xs break-all">${escapeHtml(name)}</td>
+            <td class="px-5 py-4 text-slate-400">${ruleCount}</td>
+            <td class="px-5 py-4">
+              <button onclick="openSnippetEditor('${jsArg(name)}')" class="text-cf-blue hover:underline text-xs mr-3">查看 / 编辑</button>
+              <button onclick="deleteSnippet('${jsArg(name)}')" class="text-red-400 hover:underline text-xs">删除</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // 去除 Cloudflare 返回的 multipart 包装（边界行、Content-Disposition / Content-Type 头），只保留纯源码
+    function stripSnippetMultipart(text) {
+      if (typeof text !== 'string') return text;
+      let t = text.replace(/^\uFEFF/, '');
+      const lines = t.split(/\r?\n/);
+      if (lines.length < 2 || !/^--[^\s]+/.test(lines[0])) return text;
+      // 第二行必须是 multipart 部件头，否则不是包装格式
+      if (!/^Content-Disposition:\s*form-data/i.test(lines[1] || '')) return text;
+      const boundary = lines[0];
+      let end = lines.length;
+      for (let i = 1; i < lines.length; i++) {
+        if (lines[i].trim() === boundary + '--' || lines[i].trim() === boundary) { end = i; break; }
+      }
+      // 跳过部件头（到第一个空行），尾部去掉空行和边界行
+      let body = lines.slice(2, end);
+      while (body.length && body[0].trim() !== '') body.shift();
+      while (body.length && body[0].trim() === '') body.shift();
+      while (body.length && body[body.length - 1].trim() === '') body.pop();
+      return body.join('\n');
+    }
+
+    async function openSnippetEditor(name) {
+      const nameInput = document.getElementById('snippet-edit-name');
+      const codeInput = document.getElementById('snippet-edit-code');
+      nameInput.value = name || '';
+      nameInput.readOnly = !!name;
+      codeInput.value = '// 加载中...';
+      appState.editingSnippetName = name || null;
+      document.getElementById('modal-snippet-editor').classList.remove('hidden');
+      if (!name) {
+        codeInput.value = "export default {\n  async fetch(request) {\n    return new Response('Hello from snippet');\n  }\n};\n";
+        snippetEditRules = [];
+        renderSnippetRuleRows();
+        return;
+      }
+      // 填充该 Snippet 的触发规则
+      snippetEditRules = (appState.snippetRules || [])
+        .filter(r => snippetRuleScriptName(r) === name)
+        .map(r => ({
+          expression: r.expression || '',
+          description: r.description || '',
+          enabled: r.enabled !== false && !r.paused
+        }));
+      renderSnippetRuleRows();
+      const zoneId = appState.currentZone && appState.currentZone.id;
+      if (!zoneId) return;
+      try {
+        const raw = await cfRequestText('GET', `/zones/${zoneId}/snippets/${encodeURIComponent(name)}/content`);
+        codeInput.value = stripSnippetMultipart(raw);
+      } catch (e) {
+        console.error('load snippet content failed:', e);
+        codeInput.value = '';
+        alert('加载代码失败: ' + e);
+      }
+    }
+    window.openSnippetEditor = openSnippetEditor;
+
+    // 规则中引用的脚本名（不同 API 版本字段可能不同）
+    function snippetRuleScriptName(rule) {
+      return rule.script_name || rule.snippet_name || (rule.action_parameters && rule.action_parameters.script_name) || '';
+    }
+
+    // 当前弹窗中正在编辑的规则列表
+    let snippetEditRules = [];
+
+    function renderSnippetRuleRows() {
+      const container = document.getElementById('snippet-rules-list');
+      if (!container) return;
+      if (!snippetEditRules.length) {
+        container.innerHTML = '<div class="text-xs text-slate-500 text-center py-3 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl">暂无规则，点击右上角“+ 添加规则”创建</div>';
+        return;
+      }
+      container.innerHTML = snippetEditRules.map((r, i) => `
+        <div class="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <input type="text" value="${escapeHtml(r.description)}" placeholder="规则描述（可选）" oninput="updateSnippetRule(${i}, 'description', this.value)"
+              class="flex-1 min-w-0 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs outline-none focus:border-cf-orange">
+            <label class="flex items-center gap-1.5 text-xs text-slate-400 shrink-0 cursor-pointer">
+              <input type="checkbox" ${r.enabled ? 'checked' : ''} onchange="updateSnippetRule(${i}, 'enabled', this.checked)" class="rounded border-slate-500">
+              启用
+            </label>
+            <button type="button" onclick="removeSnippetRuleRow(${i})" class="text-red-400 hover:text-red-300 shrink-0 p-1" title="删除规则">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+            </button>
+          </div>
+          <textarea rows="2" spellcheck="false" placeholder="表达式，例如：http.request.uri.path contains &quot;/api/&quot;" oninput="updateSnippetRule(${i}, 'expression', this.value)"
+            class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono outline-none focus:border-cf-orange">${escapeHtml(r.expression)}</textarea>
+        </div>
+      `).join('');
+    }
+    window.renderSnippetRuleRows = renderSnippetRuleRows;
+
+    function addSnippetRuleRow() {
+      snippetEditRules.push({ expression: '', description: '', enabled: true });
+      renderSnippetRuleRows();
+    }
+    window.addSnippetRuleRow = addSnippetRuleRow;
+
+    function removeSnippetRuleRow(index) {
+      snippetEditRules.splice(index, 1);
+      renderSnippetRuleRows();
+    }
+    window.removeSnippetRuleRow = removeSnippetRuleRow;
+
+    function updateSnippetRule(index, field, value) {
+      if (!snippetEditRules[index]) return;
+      snippetEditRules[index][field] = value;
+    }
+    window.updateSnippetRule = updateSnippetRule;
+
+    function closeSnippetEditor() {
+      document.getElementById('modal-snippet-editor').classList.add('hidden');
+    }
+    window.closeSnippetEditor = closeSnippetEditor;
+
+    async function saveSnippet() {
+      const zoneId = appState.currentZone && appState.currentZone.id;
+      if (!zoneId) { alert('请先选择一个域名'); return; }
+      const name = document.getElementById('snippet-edit-name').value.trim();
+      const code = stripSnippetMultipart(document.getElementById('snippet-edit-code').value);
+      if (!name) { alert('请输入 Snippet 名称'); return; }
+      if (!/^[a-z0-9_-]+$/.test(name)) { alert('名称只能包含小写字母、数字、_ 和 -'); return; }
+      // 过滤掉未填表达式的空规则
+      const myRules = snippetEditRules
+        .filter(r => (r.expression || '').trim())
+        .map(r => ({
+          expression: r.expression.trim(),
+          action: 'execute',
+          action_parameters: { script_name: name },
+          ...(r.description ? { description: r.description } : {}),
+          enabled: r.enabled !== false
+        }));
+      try {
+        const { body, contentType } = buildWorkerMultipart(code, { main_module: 'snippet.js' }, 'snippet.js');
+        await cfRequestText('PUT', `/zones/${zoneId}/snippets/${encodeURIComponent(name)}`, body, contentType);
+        // 保存触发规则：保留其他 Snippet 的规则，替换当前 Snippet 的规则
+        if (!Array.isArray(appState.snippetRules)) {
+          const rulesResult = await cfRequest('GET', `/zones/${zoneId}/snippets/snippet_rules`);
+          const r = rulesResult.success ? rulesResult.result : null;
+          appState.snippetRules = Array.isArray(r) ? r : ((r && Array.isArray(r.rules)) ? r.rules : []);
+        }
+        const otherRules = appState.snippetRules.filter(r => snippetRuleScriptName(r) !== name);
+        const putBody = { rules: otherRules.concat(myRules) };
+        const putResult = await cfRequest('PUT', `/zones/${zoneId}/snippets/snippet_rules`, putBody);
+        if (!putResult.success) { alert('Snippet 已保存，但规则保存失败: ' + cfRuleError(putResult)); }
+        closeSnippetEditor();
+        await loadSnippets();
+      } catch (e) {
+        alert('保存失败: ' + e);
+      }
+    }
+    window.saveSnippet = saveSnippet;
+
+    async function deleteSnippet(name) {
+      const zoneId = appState.currentZone && appState.currentZone.id;
+      if (!zoneId || !name) return;
+      if (!confirm(`确定要删除 Snippet "${name}" 吗？`)) return;
+      try {
+        await cfRequest('DELETE', `/zones/${zoneId}/snippets/${encodeURIComponent(name)}`);
+        await loadSnippets();
+      } catch (e) {
+        alert('删除失败: ' + e);
+      }
+    }
+    window.deleteSnippet = deleteSnippet;
+
+    // ========== 6. 负载均衡 (Load Balancer) ==========
+    async function loadLoadBalancers() {
+      const tbody = document.getElementById('lb-tbody');
+      if (!tbody) return;
+      tbody.innerHTML = tableLoadingRow(5);
+      const zoneId = await ensureZoneForPage('loadbalancer-zone-select');
+      if (!zoneId) { tbody.innerHTML = tableEmptyRow(5, '请先选择域名'); return; }
+      try {
+        const result = await cfRequest('GET', `/zones/${zoneId}/load_balancers`);
+        appState.lbList = result.success ? (result.result || []) : [];
+        if (!result.success) alert(cfRuleError(result));
+      } catch (e) {
+        console.error('load load balancers failed:', e);
+        alert('加载负载均衡器失败: ' + e);
+        appState.lbList = [];
+      }
+      renderLoadBalancers();
+    }
+    window.loadLoadBalancers = loadLoadBalancers;
+
+    function onLoadBalancerZoneChange() {
+      handleZoneSelectChange('loadbalancer-zone-select');
+      loadLoadBalancers();
+    }
+    window.onLoadBalancerZoneChange = onLoadBalancerZoneChange;
+
+    function renderLoadBalancers() {
+      const tbody = document.getElementById('lb-tbody');
+      if (!tbody) return;
+      const lbs = appState.lbList || [];
+      if (lbs.length === 0) {
+        tbody.innerHTML = tableEmptyRow(5, '暂无负载均衡器');
+        return;
+      }
+      tbody.innerHTML = lbs.map(lb => `
+        <tr class="hover:bg-slate-100/30 dark:hover:bg-slate-800/30 transition-colors">
+          <td class="px-5 py-4 font-medium">${escapeHtml(lb.name || '')}</td>
+          <td class="px-5 py-4 text-slate-400">${(lb.default_pools || []).length}</td>
+          <td class="px-5 py-4 text-slate-400">${lb.proxied ? '是' : '否'}</td>
+          <td class="px-5 py-4">${renderEnabledToggle(`toggleLoadBalancer('${jsArg(lb.id)}', ${lb.enabled === false})`, lb.enabled !== false)}</td>
+          <td class="px-5 py-4">
+            <button onclick="deleteLoadBalancer('${jsArg(lb.id)}', '${jsArg(lb.name)}')" class="text-red-400 hover:underline text-xs">删除</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function toggleLoadBalancer(lbId, enabled) {
+      const zoneId = appState.currentZone && appState.currentZone.id;
+      if (!zoneId) return;
+      try {
+        const result = await cfRequest('PATCH', `/zones/${zoneId}/load_balancers/${lbId}`, { enabled });
+        if (!result.success) { alert(cfRuleError(result)); }
+        await loadLoadBalancers();
+      } catch (e) {
+        alert('切换状态失败: ' + e);
+      }
+    }
+    window.toggleLoadBalancer = toggleLoadBalancer;
+
+    async function createLoadBalancer() {
+      const zoneId = appState.currentZone && appState.currentZone.id;
+      if (!zoneId) { alert('请先选择一个域名'); return; }
+      let pools = appState.lbPools;
+      if (!pools) await loadLbPools();
+      pools = appState.lbPools || [];
+      if (pools.length === 0) {
+        alert('当前账户没有可用的 Pool，请先创建 Pool。');
+        return;
+      }
+      const name = prompt('负载均衡器名称（例如 lb.example.com）：');
+      if (!name) return;
+      const poolListText = pools.map((p, i) => `${i + 1}. ${p.name} (${(p.origins || []).map(o => o.address || o.name || '').join(', ') || '无 origin'})`).join('\n');
+      const idx = parseInt(prompt(`选择默认 Pool（输入序号）：\n${poolListText}`, '1'), 10);
+      const pool = pools[idx - 1];
+      if (!pool) { alert('无效的 Pool 序号'); return; }
+      try {
+        const result = await cfRequest('POST', `/zones/${zoneId}/load_balancers`, {
+          name,
+          default_pools: [pool.id],
+          fallback_pool: pool.id,
+          proxied: true
+        });
+        if (!result.success) { alert(cfRuleError(result)); return; }
+        await loadLoadBalancers();
+      } catch (e) {
+        alert('创建失败: ' + e);
+      }
+    }
+    window.createLoadBalancer = createLoadBalancer;
+
+    async function deleteLoadBalancer(lbId, name) {
+      const zoneId = appState.currentZone && appState.currentZone.id;
+      if (!zoneId) return;
+      if (!confirm(`确定要删除负载均衡器 "${name}" 吗？`)) return;
+      try {
+        const result = await cfRequest('DELETE', `/zones/${zoneId}/load_balancers/${lbId}`);
+        if (!result.success) { alert(cfRuleError(result)); return; }
+        await loadLoadBalancers();
+      } catch (e) {
+        alert('删除失败: ' + e);
+      }
+    }
+    window.deleteLoadBalancer = deleteLoadBalancer;
+
+    async function loadLbPools() {
+      const tbody = document.getElementById('lb-pools-tbody');
+      if (!tbody) return;
+      if (!appState.currentAccount?.account_id) {
+        tbody.innerHTML = tableEmptyRow(4, '请先选择或添加一个账户');
+        return;
+      }
+      tbody.innerHTML = tableLoadingRow(4);
+      try {
+        const result = await cfRequest('GET', `/accounts/${appState.currentAccount.account_id}/load_balancers/pools`);
+        appState.lbPools = result.success ? (result.result || []) : [];
+        if (!result.success) alert(cfRuleError(result));
+      } catch (e) {
+        console.error('load LB pools failed:', e);
+        alert('加载 Pools 失败: ' + e);
+        appState.lbPools = [];
+      }
+      renderLbPools();
+    }
+    window.loadLbPools = loadLbPools;
+
+    function renderLbPools() {
+      const tbody = document.getElementById('lb-pools-tbody');
+      if (!tbody) return;
+      const pools = appState.lbPools || [];
+      if (pools.length === 0) {
+        tbody.innerHTML = tableEmptyRow(4, '暂无 Pools');
+        return;
+      }
+      tbody.innerHTML = pools.map(p => {
+        const origins = (p.origins || []).map(o => o.address || o.name || '').filter(Boolean).join(', ');
+        const healthClass = p.health === 'healthy' ? 'bg-green-500/10 text-green-500' : p.health === 'unhealthy' ? 'bg-red-500/10 text-red-500' : 'bg-slate-500/10 text-slate-400';
+        return `
+          <tr class="hover:bg-slate-100/30 dark:hover:bg-slate-800/30 transition-colors">
+            <td class="px-5 py-4 font-medium">${escapeHtml(p.name || '')}</td>
+            <td class="px-5 py-4 text-slate-400 font-mono text-xs truncate max-w-xs">${escapeHtml(origins || '-')}</td>
+            <td class="px-5 py-4"><span class="px-2 py-1 rounded-full text-xs ${healthClass}">${escapeHtml(p.health || (p.enabled ? 'unknown' : 'disabled'))}</span></td>
+            <td class="px-5 py-4">
+              <button onclick="deleteLbPool('${jsArg(p.id)}', '${jsArg(p.name)}')" class="text-red-400 hover:underline text-xs">删除</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function createLbPool() {
+      if (!appState.currentAccount?.account_id) return;
+      const name = prompt('Pool 名称：');
+      if (!name) return;
+      const address = prompt('Origin 地址（IP 或域名，例如 1.2.3.4）：');
+      if (!address) return;
+      try {
+        const result = await cfRequest('POST', `/accounts/${appState.currentAccount.account_id}/load_balancers/pools`, {
+          name,
+          origins: [{ name: address.replace(/[^a-zA-Z0-9.-]/g, '_'), address }]
+        });
+        if (!result.success) { alert(cfRuleError(result)); return; }
+        await loadLbPools();
+      } catch (e) {
+        alert('创建失败: ' + e);
+      }
+    }
+    window.createLbPool = createLbPool;
+
+    async function deleteLbPool(poolId, name) {
+      if (!appState.currentAccount?.account_id) return;
+      if (!confirm(`确定要删除 Pool "${name}" 吗？`)) return;
+      try {
+        const result = await cfRequest('DELETE', `/accounts/${appState.currentAccount.account_id}/load_balancers/pools/${poolId}`);
+        if (!result.success) { alert(cfRuleError(result)); return; }
+        await loadLbPools();
+      } catch (e) {
+        alert('删除失败: ' + e);
+      }
+    }
+    window.deleteLbPool = deleteLbPool;
+
+    async function loadLbMonitors() {
+      const tbody = document.getElementById('lb-monitors-tbody');
+      if (!tbody) return;
+      if (!appState.currentAccount?.account_id) {
+        tbody.innerHTML = tableEmptyRow(4, '请先选择或添加一个账户');
+        return;
+      }
+      tbody.innerHTML = tableLoadingRow(4);
+      try {
+        const result = await cfRequest('GET', `/accounts/${appState.currentAccount.account_id}/load_balancers/monitors`);
+        appState.lbMonitors = result.success ? (result.result || []) : [];
+        if (!result.success) alert(cfRuleError(result));
+      } catch (e) {
+        console.error('load LB monitors failed:', e);
+        alert('加载 Monitors 失败: ' + e);
+        appState.lbMonitors = [];
+      }
+      renderLbMonitors();
+    }
+    window.loadLbMonitors = loadLbMonitors;
+
+    function renderLbMonitors() {
+      const tbody = document.getElementById('lb-monitors-tbody');
+      if (!tbody) return;
+      const monitors = appState.lbMonitors || [];
+      if (monitors.length === 0) {
+        tbody.innerHTML = tableEmptyRow(4, '暂无 Monitors');
+        return;
+      }
+      tbody.innerHTML = monitors.map(m => `
+        <tr class="hover:bg-slate-100/30 dark:hover:bg-slate-800/30 transition-colors">
+          <td class="px-5 py-4 font-medium">${escapeHtml(m.type || '-')}</td>
+          <td class="px-5 py-4 text-slate-400 font-mono text-xs">${escapeHtml(m.path || '/')}</td>
+          <td class="px-5 py-4 text-slate-400">${escapeHtml(m.expected_codes || '2xx')}</td>
+          <td class="px-5 py-4">
+            <button onclick="deleteLbMonitor('${jsArg(m.id)}')" class="text-red-400 hover:underline text-xs">删除</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function createLbMonitor() {
+      if (!appState.currentAccount?.account_id) return;
+      const type = prompt('监控类型（http / https / tcp）：', 'https') || 'https';
+      const path = prompt('监控路径：', '/health') || '/health';
+      const expectedCodes = prompt('期望状态码：', '2xx') || '2xx';
+      try {
+        const result = await cfRequest('POST', `/accounts/${appState.currentAccount.account_id}/load_balancers/monitors`, {
+          type, expected_codes: expectedCodes, path
+        });
+        if (!result.success) { alert(cfRuleError(result)); return; }
+        await loadLbMonitors();
+      } catch (e) {
+        alert('创建失败: ' + e);
+      }
+    }
+    window.createLbMonitor = createLbMonitor;
+
+    async function deleteLbMonitor(monitorId) {
+      if (!appState.currentAccount?.account_id) return;
+      if (!confirm('确定要删除这个 Monitor 吗？')) return;
+      try {
+        const result = await cfRequest('DELETE', `/accounts/${appState.currentAccount.account_id}/load_balancers/monitors/${monitorId}`);
+        if (!result.success) { alert(cfRuleError(result)); return; }
+        await loadLbMonitors();
+      } catch (e) {
+        alert('删除失败: ' + e);
+      }
+    }
+    window.deleteLbMonitor = deleteLbMonitor;
+
+    // ========== 7. 健康检查 (Health Checks) ==========
+    async function loadHealthChecks() {
+      const tbody = document.getElementById('healthchecks-tbody');
+      if (!tbody) return;
+      tbody.innerHTML = tableLoadingRow(7);
+      const zoneId = await ensureZoneForPage('healthchecks-zone-select');
+      if (!zoneId) { tbody.innerHTML = tableEmptyRow(7, '请先选择域名'); return; }
+      try {
+        const result = await cfRequest('GET', `/zones/${zoneId}/healthchecks`);
+        appState.healthChecks = result.success ? (result.result || []) : [];
+        if (!result.success) alert(cfRuleError(result));
+      } catch (e) {
+        console.error('load health checks failed:', e);
+        alert('加载健康检查失败: ' + e);
+        appState.healthChecks = [];
+      }
+      renderHealthChecks();
+    }
+    window.loadHealthChecks = loadHealthChecks;
+
+    function onHealthChecksZoneChange() {
+      handleZoneSelectChange('healthchecks-zone-select');
+      loadHealthChecks();
+    }
+    window.onHealthChecksZoneChange = onHealthChecksZoneChange;
+
+    function renderHealthChecks() {
+      const tbody = document.getElementById('healthchecks-tbody');
+      if (!tbody) return;
+      const checks = appState.healthChecks || [];
+      if (checks.length === 0) {
+        tbody.innerHTML = tableEmptyRow(7, '暂无健康检查');
+        return;
+      }
+      tbody.innerHTML = checks.map(c => {
+        const suspended = !!c.suspended;
+        const statusClass = suspended ? 'bg-yellow-500/10 text-yellow-500' : 'bg-green-500/10 text-green-500';
+        return `
+          <tr class="hover:bg-slate-100/30 dark:hover:bg-slate-800/30 transition-colors">
+            <td class="px-5 py-4 font-medium">${escapeHtml(c.name || '')}</td>
+            <td class="px-5 py-4 text-slate-400 font-mono text-xs">${escapeHtml(c.address || '')}</td>
+            <td class="px-5 py-4 text-slate-400">${escapeHtml(c.type || '-')}</td>
+            <td class="px-5 py-4 text-slate-400">${c.port != null ? c.port : '-'}</td>
+            <td class="px-5 py-4 text-slate-400">${c.interval != null ? c.interval + 's' : '-'}</td>
+            <td class="px-5 py-4"><span class="px-2 py-1 rounded-full text-xs ${statusClass}">${suspended ? '已暂停' : '运行中'}</span></td>
+            <td class="px-5 py-4">
+              <button onclick="toggleHealthCheck('${jsArg(c.id)}', ${!suspended})" class="text-cf-blue hover:underline text-xs mr-3">${suspended ? '恢复' : '暂停'}</button>
+              <button onclick="deleteHealthCheck('${jsArg(c.id)}')" class="text-red-400 hover:underline text-xs">删除</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function toggleHealthCheck(checkId, suspended) {
+      const zoneId = appState.currentZone && appState.currentZone.id;
+      if (!zoneId) return;
+      try {
+        const result = await cfRequest('PATCH', `/zones/${zoneId}/healthchecks/${checkId}`, { suspended });
+        if (!result.success) { alert(cfRuleError(result)); }
+        await loadHealthChecks();
+      } catch (e) {
+        alert('操作失败: ' + e);
+      }
+    }
+    window.toggleHealthCheck = toggleHealthCheck;
+
+    async function deleteHealthCheck(checkId) {
+      const zoneId = appState.currentZone && appState.currentZone.id;
+      if (!zoneId) return;
+      if (!confirm('确定要删除这条健康检查吗？')) return;
+      try {
+        const result = await cfRequest('DELETE', `/zones/${zoneId}/healthchecks/${checkId}`);
+        if (!result.success) { alert(cfRuleError(result)); return; }
+        await loadHealthChecks();
+      } catch (e) {
+        alert('删除失败: ' + e);
+      }
+    }
+    window.deleteHealthCheck = deleteHealthCheck;
+
+    async function createHealthCheck() {
+      const zoneId = appState.currentZone && appState.currentZone.id;
+      if (!zoneId) { alert('请先选择一个域名'); return; }
+      const name = prompt('检查名称：');
+      if (!name) return;
+      const address = prompt('目标地址（例如 origin.example.com）：');
+      if (!address) return;
+      const type = (prompt('类型（HTTPS / HTTP / TCP）：', 'HTTPS') || 'HTTPS').toUpperCase();
+      const port = parseInt(prompt('端口：', '443'), 10) || 443;
+      const interval = parseInt(prompt('检查间隔（秒）：', '60'), 10) || 60;
+      try {
+        const result = await cfRequest('POST', `/zones/${zoneId}/healthchecks`, {
+          name, address, type, port, interval
+        });
+        if (!result.success) { alert(cfRuleError(result)); return; }
+        await loadHealthChecks();
+      } catch (e) {
+        alert('创建失败: ' + e);
+      }
+    }
+    window.createHealthCheck = createHealthCheck;
+
     // 初始化
     document.addEventListener('DOMContentLoaded', () => {
       // 启动时强制同步主题，避免半透明 glass 叠在错误底色上发灰
@@ -3065,10 +4166,16 @@
       const versionEl = document.getElementById('app-version');
       if (versionEl) versionEl.textContent = APP_VERSION;
       loadAccounts();
+      applyBgSettings();
+      syncBgSettingsUI();
       // 每 60 秒刷新一次 API 连接状态
       setInterval(() => {
         if (appState.currentAccount) refreshApiStatus();
       }, 60000);
+      // 每 5 分钟重新拉取 Workers 今日请求数，让数字随分析数据入库追上 CF 面板
+      setInterval(() => {
+        if (appState.currentAccount) loadWorkersTotalRequests().then(() => renderDashboard()).catch(() => {});
+      }, 5 * 60 * 1000);
       // 隐藏启动加载动画
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {

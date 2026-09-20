@@ -35,3 +35,14 @@ dist/
 # Local-only tools / sensitive files
 git-push.bat
 会话记录备份.md
+COMMIT_MSG.txt
+
+# Token and scripts
+token.txt
+git-config.txt
+强制推送脚本.bat
+打包源码.py
+生成图标.py
+Android智能编译脚本_v2.0.bat
+cloudflare-manager-v0.2.0-src.zip
+cloudflare多账户管理系统-v0.3.0-src.zip

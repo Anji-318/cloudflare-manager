@@ -1,6 +1,6 @@
 {
   "name": "cloudflare-manager",
-  "version": "0.3.1",
+  "version": "0.3.3",
   "description": "Cloudflare 多账户管理系统",
   "main": "index.js",
   "scripts": {

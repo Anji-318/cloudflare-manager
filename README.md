@@ -22,7 +22,7 @@ C:\Users\Giga\Desktop\cloudflare多账户管理系统
 - [x] Token 加密存储，切换账户时从本地存储实时读取对应 Token
 - [x] 域名列表、DNS 记录管理（增删改查、代理开关）
 - [x] Workers：脚本列表、编辑部署、Secrets、自定义域名、Zone Routes、workers.dev 开关
-- [x] Pages：项目列表、部署历史、域名管理
+- [x] Pages：项目列表、部署历史、域名管理，支持本地目录 wrangler 部署、ZIP 压缩包 Direct Upload 部署与 Wrangler 项目目录部署
 - [x] R2：Bucket 列表与创建/删除
 - [x] KV / D1：命名空间/数据库列表与基本管理
 - [x] Tunnels、Firewall、缓存清除、分析报表入口
@@ -46,7 +46,7 @@ npm run build
 构建产物：
 
 - 可执行文件：`src-tauri\target\release\cloudflare-manager.exe`
-- 安装包：`src-tauri\target\release\bundle\nsis\cloudflare-manager_0.3.0_x64-setup.exe`
+- 安装包：`src-tauri\target\release\bundle\nsis\cloudflare-manager_0.3.2_x64-setup.exe`
 
 ### 快速构建脚本
 
@@ -126,5 +126,5 @@ Token 缺少“帐户 - 帐户（读取）”权限，或 Account Resources 未�
 
 构建完成后，建议同时保留：
 
-- 安装包：`cloudflare-manager_0.3.0_x64-setup.exe`
+- 安装包：`cloudflare-manager_0.3.2_x64-setup.exe`
 - 可执行文件：`cloudflare-manager.exe`

@@ -1,13 +1,12 @@
 name: Release Desktop App
-
 on:
   # 只允许手动触发，不会在上传文件或提交时自动发版
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag, e.g. v0.3.0'
+        description: 'Release tag, e.g. v0.3.1'
         required: true
-        default: 'v0.3.0'
+        default: 'v0.3.1'
       draft:
         description: 'Create as draft release'
         type: boolean
@@ -17,13 +16,13 @@ on:
 jobs:
   release:
     runs-on: windows-latest
-
     permissions:
-      contents: write   # 用于创建 Release 和上传附件
-
+      contents: write # 用于创建 Release 和上传附件
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 需要完整历史以便删除旧 tag
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -44,6 +43,22 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      # 关键：确保 Tailwind 输入文件存在
+      - name: Ensure Tailwind input CSS exists
+        shell: bash
+        run: |
+          if [ ! -f ./src/input.css ]; then
+            mkdir -p src
+            cat > ./src/input.css << 'EOF'
+          @tailwind base;
+          @tailwind components;
+          @tailwind utilities;
+          EOF
+            echo "Created missing src/input.css"
+          else
+            echo "src/input.css already exists"
+          fi
+
       - name: Build Tauri app
         run: npm run build
 
@@ -54,6 +69,41 @@ jobs:
           VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      # 关键修改：如果同名 Release / Tag 已存在，先删除再重建
+      - name: Delete existing release and tag (if any)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          echo "Checking if release/tag '$TAG' already exists..."
+
+          # 1. 删除已存在的 Release（如果有）
+          if gh release view "$TAG" &>/dev/null; then
+            echo "Release '$TAG' exists. Deleting..."
+            gh release delete "$TAG" --yes
+          else
+            echo "Release '$TAG' does not exist."
+          fi
+
+          # 2. 删除已存在的远程 Tag（如果有）
+          if git ls-remote --tags origin "$TAG" | grep -q "$TAG"; then
+            echo "Remote tag '$TAG' exists. Deleting..."
+            git push --delete origin "$TAG"
+          else
+            echo "Remote tag '$TAG' does not exist."
+          fi
+
+          # 3. 删除本地 Tag（如果有）
+          if git tag -l "$TAG" | grep -q "$TAG"; then
+            echo "Local tag '$TAG' exists. Deleting..."
+            git tag -d "$TAG"
+          else
+            echo "Local tag '$TAG' does not exist."
+          fi
+
+          echo "Cleanup completed. Ready to create new release."
+
       - name: Create GitHub Release and upload assets
         shell: bash
         env:
@@ -62,14 +112,11 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           TAG="${{ github.event.inputs.tag }}"
           DRAFT_FLAG=""
-
           if [ "${{ github.event.inputs.draft }}" = "true" ]; then
             DRAFT_FLAG="--draft"
           fi
-
-          gh release create "$TAG" \
-            --title "Cloudflare Manager $TAG" \
-            --generate-notes \
-            $DRAFT_FLAG \
-            "src-tauri/target/release/cloudflare-manager.exe#cloudflare-manager-$VERSION.exe" \
-            "src-tauri/target/release/bundle/nsis/cloudflare-manager_${VERSION}_x64-setup.exe#cloudflare-manager-${VERSION}_x64-setup.exe"
+<<<<<<< HEAD
+          gh release create "$TAG"             --title "Cloudflare Manager $TAG"             --generate-notes             $DRAFT_FLAG             "src-tauri/target/release/cloudflare-manager.exe#cloudflare-manager-$VERSION.exe"             "src-tauri/target/release/bundle/nsis/cloudflare-manager_${VERSION}_x64-setup.exe#cloudflare-manager-${VERSION}_x64-setup.exe"
+=======
+          gh release create "$TAG"             --title "Cloudflare Manager $TAG"             --generate-notes             $DRAFT_FLAG             "src-tauri/target/release/cloudflare-manager.exe#cloudflare-manager-$VERSION.exe"             "src-tauri/target/release/bundle/nsis/cloudflare-manager_${VERSION}_x64-setup.exe#cloudflare-manager-${VERSION}_x64-setup.exe"
+>>>>>>> 772aff770c2b49ca0c5e932e21867ddc02126d3d
