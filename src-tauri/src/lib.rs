@@ -156,6 +156,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             validate_token,
             get_app_version,
+            update_account_avatar,
             save_account,
             list_accounts,
             get_account_token,
@@ -345,6 +346,23 @@ fn list_accounts(app: AppHandle) -> Result<Vec<Account>, String> {
         .and_then(|v| serde_json::from_value(v).ok())
         .unwrap_or_default();
     Ok(accounts)
+}
+
+#[tauri::command]
+fn update_account_avatar(app: AppHandle, id: String, avatar: Option<String>) -> Result<(), String> {
+    let store = get_store(&app)?;
+    let mut accounts: Vec<Account> = store
+        .get("accounts")
+        .and_then(|v| serde_json::from_value(v).ok())
+        .unwrap_or_default();
+    let account = accounts
+        .iter_mut()
+        .find(|a| a.id == id)
+        .ok_or("Account not found")?;
+    account.avatar = avatar;
+    store.set("accounts", serde_json::to_value(&accounts).map_err(|e| e.to_string())?);
+    store.save().map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
