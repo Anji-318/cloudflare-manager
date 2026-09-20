@@ -46,7 +46,7 @@ npm run build
 构建产物：
 
 - 可执行文件：`src-tauri\target\release\cloudflare-manager.exe`
-- 安装包：`src-tauri\target\release\bundle\nsis\cloudflare-manager_0.3.2_x64-setup.exe`
+- 安装包：`src-tauri\target\release\bundle\nsis\cloudflare-manager_0.3.3_x64-setup.exe`
 
 ### 快速构建脚本
 
@@ -126,5 +126,9 @@ Token 缺少“帐户 - 帐户（读取）”权限，或 Account Resources 未�
 
 构建完成后，建议同时保留：
 
-- 安装包：`cloudflare-manager_0.3.2_x64-setup.exe`
+- 安装包：`cloudflare-manager_0.3.3_x64-setup.exe`
 - 可执行文件：`cloudflare-manager.exe`
+
+## 开源许可
+
+本项目采用 **MIT OR Apache-2.0** 双许可，详见 [LICENSE-MIT](LICENSE-MIT) 与 [LICENSE-APACHE](LICENSE-APACHE)。
