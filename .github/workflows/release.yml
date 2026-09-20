@@ -58,7 +58,6 @@ jobs:
           else
             echo "src/input.css already exists"
           fi
-
       - name: Build Tauri app
         run: npm run build
 
@@ -68,7 +67,6 @@ jobs:
         run: |
           VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
       # 关键修改：如果同名 Release / Tag 已存在，先删除再重建
       - name: Delete existing release and tag (if any)
         shell: bash
@@ -77,7 +75,6 @@ jobs:
         run: |
           TAG="${{ github.event.inputs.tag }}"
           echo "Checking if release/tag '$TAG' already exists..."
-
           # 1. 删除已存在的 Release（如果有）
           if gh release view "$TAG" &>/dev/null; then
             echo "Release '$TAG' exists. Deleting..."
@@ -85,7 +82,6 @@ jobs:
           else
             echo "Release '$TAG' does not exist."
           fi
-
           # 2. 删除已存在的远程 Tag（如果有）
           if git ls-remote --tags origin "$TAG" | grep -q "$TAG"; then
             echo "Remote tag '$TAG' exists. Deleting..."
@@ -93,7 +89,6 @@ jobs:
           else
             echo "Remote tag '$TAG' does not exist."
           fi
-
           # 3. 删除本地 Tag（如果有）
           if git tag -l "$TAG" | grep -q "$TAG"; then
             echo "Local tag '$TAG' exists. Deleting..."
@@ -101,9 +96,7 @@ jobs:
           else
             echo "Local tag '$TAG' does not exist."
           fi
-
           echo "Cleanup completed. Ready to create new release."
-
       - name: Create GitHub Release and upload assets
         shell: bash
         env:
@@ -115,8 +108,4 @@ jobs:
           if [ "${{ github.event.inputs.draft }}" = "true" ]; then
             DRAFT_FLAG="--draft"
           fi
-<<<<<<< HEAD
-          gh release create "$TAG"             --title "Cloudflare Manager $TAG"             --generate-notes             $DRAFT_FLAG             "src-tauri/target/release/cloudflare-manager.exe#cloudflare-manager-$VERSION.exe"             "src-tauri/target/release/bundle/nsis/cloudflare-manager_${VERSION}_x64-setup.exe#cloudflare-manager-${VERSION}_x64-setup.exe"
-=======
-          gh release create "$TAG"             --title "Cloudflare Manager $TAG"             --generate-notes             $DRAFT_FLAG             "src-tauri/target/release/cloudflare-manager.exe#cloudflare-manager-$VERSION.exe"             "src-tauri/target/release/bundle/nsis/cloudflare-manager_${VERSION}_x64-setup.exe#cloudflare-manager-${VERSION}_x64-setup.exe"
->>>>>>> 772aff770c2b49ca0c5e932e21867ddc02126d3d
+          gh release create "$TAG"             --title "Cloudflare Manager $TAG"             --generate-notes             $DRAFT_FLAG    
