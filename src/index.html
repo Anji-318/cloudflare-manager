@@ -954,6 +954,15 @@
         </div>
         <div class="space-y-4">
           <div>
+            <label class="block text-sm font-medium mb-2">头像（可选）</label>
+            <div class="flex items-center gap-3">
+              <div id="acc-avatar-preview" class="w-12 h-12 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center overflow-hidden text-slate-400"><span class="text-xs">无</span></div>
+              <label class="px-3 py-1.5 rounded-lg bg-cf-blue/10 text-cf-blue text-xs hover:bg-cf-blue/20 cursor-pointer transition-colors">选择图片<input id="acc-avatar-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/svg+xml,image/x-icon,.png,.jpg,.jpeg,.webp,.gif,.bmp,.svg,.ico" class="hidden" onchange="onAvatarPicked(event, 'acc')"></label>
+              <button type="button" onclick="clearAvatar('acc')" class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">移除</button>
+            </div>
+            <p class="text-xs text-slate-500 mt-1.5">支持 PNG / JPG / WebP / GIF / BMP / SVG / ICO，自动裁剪为正方形并压缩，仅保存在本地。</p>
+          </div>
+          <div>
             <label class="block text-sm font-medium mb-2">账户名称</label>
             <input id="acc-name" type="text" placeholder="例如：Acme Corp" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
           </div>
@@ -999,6 +1008,15 @@
         </div>
         <div class="space-y-4">
           <input id="edit-acc-id" type="hidden">
+          <div>
+            <label class="block text-sm font-medium mb-2">头像（可选）</label>
+            <div class="flex items-center gap-3">
+              <div id="edit-acc-avatar-preview" class="w-12 h-12 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center overflow-hidden text-slate-400"><span class="text-xs">无</span></div>
+              <label class="px-3 py-1.5 rounded-lg bg-cf-blue/10 text-cf-blue text-xs hover:bg-cf-blue/20 cursor-pointer transition-colors">选择图片<input id="edit-acc-avatar-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/svg+xml,image/x-icon,.png,.jpg,.jpeg,.webp,.gif,.bmp,.svg,.ico" class="hidden" onchange="onAvatarPicked(event, 'edit-acc')"></label>
+              <button type="button" onclick="clearAvatar('edit-acc')" class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">移除</button>
+            </div>
+            <p class="text-xs text-slate-500 mt-1.5">支持 PNG / JPG / WebP / GIF / BMP / SVG / ICO，自动裁剪为正方形并压缩，仅保存在本地。</p>
+          </div>
           <div>
             <label class="block text-sm font-medium mb-2">账户名称</label>
             <input id="edit-acc-name" type="text" placeholder="例如：Acme Corp" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
