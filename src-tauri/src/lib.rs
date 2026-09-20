@@ -152,6 +152,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             validate_token,
+            get_app_version,
             save_account,
             list_accounts,
             get_account_token,
@@ -284,6 +285,12 @@ async fn cf_delete<T: serde::de::DeserializeOwned>(
 #[tauri::command]
 async fn validate_token(token: String) -> Result<CloudflareResponse<serde_json::Value>, String> {
     cf_get(&token, "/user/tokens/verify").await
+}
+
+#[tauri::command]
+fn get_app_version() -> String {
+    // 编译期取自 Cargo.toml，与 tauri.conf.json 保持一致（Tauri 对两者不一致会告警）
+    env!("CARGO_PKG_VERSION").to_string()
 }
 
 #[tauri::command]
