@@ -237,33 +237,68 @@
       if (prev) prev.innerHTML = `<img src="${dataUrl}" class="w-full h-full object-cover" alt="">`;
     }
 
-    // 选择头像：居中裁剪并压缩为 96x96 JPEG dataURL；个别格式（如 ico）画布不可解码时存原始 dataURL
-    function onAvatarPicked(event, prefix) {
-      const file = event.target.files && event.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        const img = new Image();
-        img.onload = () => {
-          try {
-            const size = 96;
-            const canvas = document.createElement('canvas');
-            canvas.width = size; canvas.height = size;
-            const ctx = canvas.getContext('2d');
-            const min = Math.min(img.width, img.height) || 1;
-            ctx.drawImage(img, (img.width - min) / 2, (img.height - min) / 2, min, min, 0, 0, size, size);
-            setPickedAvatar(prefix, canvas.toDataURL('image/jpeg', 0.85));
-          } catch (e) {
-            setPickedAvatar(prefix, reader.result);
-          }
+    // 读取图片文件：居中裁剪并压缩为 96x96 JPEG dataURL；个别格式（如 ico）画布不可解码时存原始 dataURL
+    function readAvatarDataUrl(file) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const img = new Image();
+          img.onload = () => {
+            try {
+              const size = 96;
+              const canvas = document.createElement('canvas');
+              canvas.width = size; canvas.height = size;
+              const ctx = canvas.getContext('2d');
+              const min = Math.min(img.width, img.height) || 1;
+              ctx.drawImage(img, (img.width - min) / 2, (img.height - min) / 2, min, min, 0, 0, size, size);
+              resolve(canvas.toDataURL('image/jpeg', 0.85));
+            } catch (e) {
+              resolve(reader.result);
+            }
+          };
+          img.onerror = () => resolve(reader.result);
+          img.src = reader.result;
         };
-        img.onerror = () => setPickedAvatar(prefix, reader.result);
-        img.src = reader.result;
-      };
-      reader.readAsDataURL(file);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // 弹窗内选择头像
+    async function onAvatarPicked(event, prefix) {
+      const file = event.target.files && event.target.files[0];
       event.target.value = '';
+      if (!file) return;
+      setPickedAvatar(prefix, await readAvatarDataUrl(file));
     }
     window.onAvatarPicked = onAvatarPicked;
+
+    // 账户表格中点击头像直接更换
+    let avatarPickTargetId = null;
+    function pickAccountAvatar(id) {
+      avatarPickTargetId = id;
+      document.getElementById('avatar-pick-input').click();
+    }
+    window.pickAccountAvatar = pickAccountAvatar;
+
+    async function onAccountAvatarPicked(event) {
+      const file = event.target.files && event.target.files[0];
+      event.target.value = '';
+      if (!file || !avatarPickTargetId) return;
+      const dataUrl = await readAvatarDataUrl(file);
+      const acc = (appState.accounts || []).find(a => a.id === avatarPickTargetId);
+      avatarPickTargetId = null;
+      if (!acc) return;
+      try {
+        await callBackend('save_account', { account: Object.assign({}, acc, { avatar: dataUrl }) });
+        renderAccounts();
+        if (appState.currentAccount && appState.currentAccount.id === acc.id) {
+          renderSidebarAvatar(Object.assign({}, acc, { avatar: dataUrl }));
+        }
+      } catch (e) {
+        alert('保存头像失败: ' + e);
+      }
+    }
+    window.onAccountAvatarPicked = onAccountAvatarPicked;
 
     function clearAvatar(prefix) {
       if (prefix === 'edit-acc') { appState.editAvatar = null; } else { appState.newAvatar = null; }
@@ -781,7 +816,7 @@
             <tr class="bg-cf-blue/5 transition-colors">
               <td class="px-5 py-4">
                 <div class="flex items-center gap-3">
-                  ${accountAvatarHtml(acc, 'w-8 h-8 text-xs')}
+                  <button type="button" onclick="pickAccountAvatar('${acc.id}')" title="点击更换头像" class="shrink-0 hover:opacity-80 transition-opacity">${accountAvatarHtml(acc, 'w-8 h-8 text-xs')}</button>
                   <input type="text" id="inline-name-${acc.id}" value="${escapeHtml(acc.name)}" class="w-28 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
                 </div>
               </td>
@@ -809,7 +844,7 @@
           <tr class="hover:bg-slate-100/30 dark:hover:bg-slate-800/30 transition-colors">
             <td class="px-5 py-4">
               <div class="flex items-center gap-3">
-                ${accountAvatarHtml(acc, 'w-8 h-8 text-xs')}
+                <button type="button" onclick="pickAccountAvatar('${acc.id}')" title="点击更换头像" class="shrink-0 hover:opacity-80 transition-opacity">${accountAvatarHtml(acc, 'w-8 h-8 text-xs')}</button>
                 <span class="font-medium">${escapeHtml(acc.name)}</span>
               </div>
             </td>
