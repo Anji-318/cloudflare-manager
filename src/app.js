@@ -289,10 +289,11 @@
       avatarPickTargetId = null;
       if (!acc) return;
       try {
-        await callBackend('save_account', { account: Object.assign({}, acc, { avatar: dataUrl }) });
+        await callBackend('update_account_avatar', { id: acc.id, avatar: dataUrl });
+        acc.avatar = dataUrl;
         renderAccounts();
         if (appState.currentAccount && appState.currentAccount.id === acc.id) {
-          renderSidebarAvatar(Object.assign({}, acc, { avatar: dataUrl }));
+          renderSidebarAvatar(acc);
         }
       } catch (e) {
         alert('保存头像失败: ' + e);
