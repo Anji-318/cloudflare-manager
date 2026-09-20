@@ -56,6 +56,9 @@ pub struct Account {
     pub email: String,
     pub account_id: Option<String>,
     pub token_encrypted: String,
+    /// 自定义头像（data URL，96x96 JPEG）；旧数据无此字段时为 None
+    #[serde(default)]
+    pub avatar: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
