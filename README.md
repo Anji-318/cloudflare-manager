@@ -109,9 +109,7 @@ cloudflare多账户管理系统/
 ├── package-lock.json
 └── README.md                     # 本文件
 
-# 以下文件为本地工具/分发产物，默认不提交到仓库
-# git-push.bat                    # Git 推送工具（本地使用，内含 Token）
-# cloudflare-manager-v0.3.0-src.zip   # 源码分发包（由 git-push.bat 选项 7 生成）
+
 ```
 
 
