@@ -2063,6 +2063,9 @@
       const numbers = document.getElementById('worker-line-numbers');
       if (!textarea || !numbers) return;
       const lines = textarea.value.split('\n').length || 1;
+      // 行数没变就不重建，避免每敲一个键都重建几千个节点
+      if (numbers.dataset.lines === String(lines)) return;
+      numbers.dataset.lines = String(lines);
       numbers.innerHTML = Array.from({ length: lines }, (_, i) => `<div>${i + 1}</div>`).join('');
     }
     window.updateWorkerLineNumbers = updateWorkerLineNumbers;
@@ -2081,6 +2084,8 @@
       const numbers = document.getElementById('snippet-line-numbers');
       if (!textarea || !numbers) return;
       const lines = textarea.value.split('\n').length || 1;
+      if (numbers.dataset.lines === String(lines)) return;
+      numbers.dataset.lines = String(lines);
       numbers.innerHTML = Array.from({ length: lines }, (_, i) => `<div>${i + 1}</div>`).join('');
     }
     window.updateSnippetLineNumbers = updateSnippetLineNumbers;

@@ -1117,9 +1117,11 @@
           </div>
           <div class="flex-1 flex flex-col min-h-0">
             <label class="block text-sm font-medium mb-2">脚本代码</label>
-            <div class="flex-1 flex rounded-xl border border-slate-700 overflow-hidden bg-slate-900 min-h-0 relative">
-              <div id="worker-line-numbers" class="absolute left-0 top-0 w-12 bg-slate-800/50 text-slate-500 text-sm font-mono py-2.5 pr-2 text-right overflow-visible select-none" style="line-height: 1.6;">1</div>
-              <textarea id="worker-edit-code" class="flex-1 w-full px-4 py-2.5 pl-16 bg-transparent text-green-400 text-sm outline-none focus:border-cf-orange font-mono resize-none" style="line-height: 1.6;" wrap="off" placeholder="export default {&#10;  async fetch(request) {&#10;    return new Response('Hello World');&#10;  }&#10;}" oninput="updateWorkerLineNumbers()" onscroll="syncWorkerLineNumbers()"></textarea>
+            <div class="flex-1 flex rounded-xl border border-slate-700 overflow-hidden bg-slate-900 min-h-0">
+              <div class="shrink-0 min-w-[2.5rem] overflow-hidden bg-slate-800/40 border-r border-slate-700/60 select-none">
+                <div id="worker-line-numbers" class="py-2.5 px-2 text-slate-500 text-sm font-mono text-right whitespace-nowrap" style="line-height: 1.6;">1</div>
+              </div>
+              <textarea id="worker-edit-code" class="flex-1 min-w-0 px-4 py-2.5 bg-transparent text-green-400 text-sm outline-none font-mono resize-none" style="line-height: 1.6;" wrap="off" placeholder="export default {&#10;  async fetch(request) {&#10;    return new Response('Hello World');&#10;  }&#10;}" oninput="updateWorkerLineNumbers()" onscroll="syncWorkerLineNumbers()"></textarea>
             </div>
           </div>
           <div class="flex gap-3 pt-2">
@@ -1254,9 +1256,11 @@
           </div>
           <div>
             <label class="block text-sm font-medium mb-2">代码（ES Module）</label>
-            <div class="relative rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-900">
-              <div id="snippet-line-numbers" class="absolute left-0 top-0 w-12 bg-slate-800/50 text-slate-500 text-sm font-mono py-2.5 pr-2 text-right overflow-visible select-none" style="line-height: 1.6;">1</div>
-              <textarea id="snippet-edit-code" rows="12" spellcheck="false" wrap="off" class="block w-full px-4 py-2.5 pl-16 bg-transparent text-green-400 text-sm outline-none focus:border-cf-orange font-mono resize-none" style="line-height: 1.6;" oninput="updateSnippetLineNumbers()" onscroll="syncSnippetLineNumbers()"></textarea>
+            <div class="flex h-72 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-900">
+              <div class="shrink-0 min-w-[2.5rem] overflow-hidden bg-slate-800/40 border-r border-slate-700/60 select-none">
+                <div id="snippet-line-numbers" class="py-2.5 px-2 text-slate-500 text-sm font-mono text-right whitespace-nowrap" style="line-height: 1.6;">1</div>
+              </div>
+              <textarea id="snippet-edit-code" rows="12" spellcheck="false" wrap="off" class="flex-1 min-w-0 px-4 py-2.5 bg-transparent text-green-400 text-sm outline-none font-mono resize-none" style="line-height: 1.6;" oninput="updateSnippetLineNumbers()" onscroll="syncSnippetLineNumbers()"></textarea>
             </div>
           </div>
           <div>

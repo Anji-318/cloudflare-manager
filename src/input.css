@@ -33,18 +33,24 @@ html, body, body * {
   border-radius: 9999px !important;
   margin: 4px 0;
 }
+/* 横向滚动条：留白应在左右，否则 10px 高的轨道被上下各压 4px，滑块几乎抓不到 */
+::-webkit-scrollbar-track:horizontal {
+  margin: 0 4px;
+}
 ::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb) !important;
   border-radius: 9999px !important;
   border: 2px solid transparent;
   background-clip: content-box;
   min-height: 40px;
+  min-width: 40px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover) !important;
   border: 2px solid transparent;
   background-clip: content-box;
   min-height: 40px;
+  min-width: 40px;
 }
 ::-webkit-scrollbar-button,
 ::-webkit-scrollbar-button:vertical,
@@ -77,18 +83,23 @@ html, body, body * {
   border-radius: 9999px !important;
   margin: 4px 0;
 }
+.custom-scrollbar::-webkit-scrollbar-track:horizontal {
+  margin: 0 4px;
+}
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb) !important;
   border-radius: 9999px !important;
   border: 2px solid transparent;
   background-clip: content-box;
   min-height: 40px;
+  min-width: 40px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover) !important;
   border: 2px solid transparent;
   background-clip: content-box;
   min-height: 40px;
+  min-width: 40px;
 }
 .light .custom-scrollbar::-webkit-scrollbar-track {
   background: var(--scrollbar-track-light) !important;

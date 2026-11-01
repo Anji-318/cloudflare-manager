@@ -87,6 +87,7 @@ v0.3.6 起，账户可自行选择认证方式，两种方式都能正常使用�
 | 6 | `Cargo.lock` 中本包版本仍为 0.3.3；`package.json` 的 `main` 指向不存在的 `index.js` | 版本同步为 0.3.6；移除 `main` 字段 |
 | 7 | `deploy_pages_local` 用 `lock().unwrap()`，锁中毒时会 panic | 改为 `map_err` 返回错误；同时清理 `lib.rs` 中其余 `unwrap()`（`account_id` 判空改用 `as_deref().unwrap_or("")`，路径归一化改用 `match`），当前文件已无 `unwrap()` |
 | 8 | 设置页内容整体贴左，右侧留大片空白（卡片只有 `max-w-2xl` 但没有居中） | 设置页整列（标题 + 卡片）改为 `max-w-2xl mx-auto`，在右侧内容区水平居中；标题与卡片左边缘保持对齐 |
+| 9 | Worker / Snippet 编辑器：横向滚动后**代码与行号重叠**；横向滚动条有时拖不动；行号超过 4 位数被裁 | 行号从「`absolute` 浮层 + textarea 的 `padding-left` 让位」改为**真实 flex 布局列**（`overflow-hidden` + 内部 `translateY` 跟随滚动），代码被自己的滚动容器裁剪，永远不会进入行号区；行号列宽随位数自适应（`min-w-[2.5rem]`）；横向滚动条轨道改用 `::-webkit-scrollbar-track:horizontal { margin: 0 4px }`（原来 `margin: 4px 0` 会把 10px 轨道压成 2px），滑块补 `min-width: 40px`；行号渲染按行数缓存，行数不变不重建 DOM |
 
 > 说明：以上均不改变既有功能行为，仅修体验与清理；版本号仍为 **0.3.6**。
 
