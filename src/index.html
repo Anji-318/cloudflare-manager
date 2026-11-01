@@ -879,6 +879,14 @@
               <h3 class="font-medium">自定义背景</h3>
               <p class="text-sm text-slate-500">支持本地图片或图片 URL，设置后作用于整个应用窗口</p>
             </div>
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-medium">内置背景</span>
+                <span id="bg-preset-status" class="text-xs text-slate-400">未选择内置背景</span>
+              </div>
+              <div id="bg-preset-list" class="grid grid-cols-3 sm:grid-cols-6 gap-2"></div>
+              <p class="text-xs text-slate-500 mt-2">内置背景随应用打包，不占用本地存储，选择后可继续用下方参数微调。</p>
+            </div>
             <div class="flex flex-wrap items-center gap-3">
               <label class="px-4 py-2 rounded-lg bg-cf-orange/10 text-cf-orange hover:bg-cf-orange/20 text-sm cursor-pointer transition-colors">
                 选择本地图片

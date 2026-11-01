@@ -24,7 +24,7 @@
 - [x] Snippets：Snippet 列表、创建/编辑/删除，代码编辑器带行号显示
 - [x] Tunnels、Firewall、缓存清除、分析报表入口
 - [x] 深色/浅色主题切换
-- [x] 自定义背景：本地图片或图片 URL，支持背景模糊、背景明暗、前景透明度、前景明暗四项调节（设置页）
+- [x] 自定义背景：**6 款内置预设**（极光渐变 / 星野夜空 / 霓虹光雾 / 科技网格 / 暮色山峦 / 莫兰迪）+ 本地图片 + 图片 URL 三种来源，支持背景模糊、背景明暗、前景透明度、前景明暗四项调节（设置页）
 - [x] 设置页支持一键清除所有本地数据（二次确认，删除账户与本地配置）
 
 ## 构建方式
@@ -95,6 +95,7 @@ cloudflare多账户管理系统/
 │   ├── app.js                    # 业务逻辑
 │   ├── index.html                # 主界面
 │   ├── usage.html                # 使用说明弹窗
+│   ├── assets/backgrounds/       # 内置背景预设（6 张 JPEG，约 316KB）
 │   ├── input.css                 # Tailwind 源样式（修改后需 npm run build:css）
 │   ├── tailwind.css              # Tailwind 构建产物（勿手改）
 │   └── styles.css                # 使用说明页独立样式
@@ -122,6 +123,9 @@ cloudflare多账户管理系统/
 
 **提示 HTTP 400 / 6003 / 6111（Invalid format for Authorization header）？**  
 说明你填入的是 **Global API Key**，但认证方式仍是 API Token。两种方式的请求头完全不同：Token 用 `Authorization: Bearer`，Global API Key 用 `X-Auth-Email` + `X-Auth-Key`。请进入账户「编辑」，把认证方式切换为 **Global API Key** 并填写 Cloudflare 登录邮箱后重试（v0.3.6 起粘贴 37 位十六进制密钥会自动切换）。
+
+**内置背景和本地图片有什么区别？**  
+内置背景（设置页最上方一排缩略图）是随应用打包的 6 张预设图，选中后只在本地存储里记一个相对路径，**不占用 localStorage**，切换无成本；本地图片会被转成 data URL 存入 localStorage（超过 600KB 自动压缩），URL 方式则只存链接。三者可随时互换，且都能用下方四个滑块继续微调。
 
 **设置背景图片后看不到效果？**  
 v0.3.6 已修复：此前 `src/input.css` 残留 Git 合并冲突标记，被编译进 `tailwind.css`，导致 `#app-background` 规则被浏览器丢弃，背景图完全不显示（本地图片与 URL 两种方式都会失效）。如果你用的是更早的构建，请重新 `npm run build`。  

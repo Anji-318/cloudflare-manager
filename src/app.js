@@ -390,6 +390,53 @@
 
     // ========== 自定义背景与前景调节 ==========
     const BG_DEFAULTS = { image: '', blur: 0, brightness: 100, fgAlpha: 92, fgBrightness: 100 };
+    // 内置背景：随应用打包的静态资源，只存相对路径，不占 localStorage
+    const BG_PRESETS = [
+      { id: 'aurora', name: '极光渐变', path: 'assets/backgrounds/aurora.jpg' },
+      { id: 'midnight', name: '星野夜空', path: 'assets/backgrounds/midnight.jpg' },
+      { id: 'mesh', name: '霓虹光雾', path: 'assets/backgrounds/mesh.jpg' },
+      { id: 'grid', name: '科技网格', path: 'assets/backgrounds/grid.jpg' },
+      { id: 'dusk', name: '暮色山峦', path: 'assets/backgrounds/dusk.jpg' },
+      { id: 'morandi', name: '莫兰迪', path: 'assets/backgrounds/morandi.jpg' }
+    ];
+
+    function findBgPreset(image) {
+      return BG_PRESETS.find(p => p.path === image) || null;
+    }
+
+    function renderBgPresets() {
+      const list = document.getElementById('bg-preset-list');
+      if (!list) return;
+      const current = loadBgSettings().image || '';
+      list.innerHTML = BG_PRESETS.map(p => {
+        const active = current === p.path;
+        const frame = active
+          ? 'border-cf-orange ring-2 ring-cf-orange'
+          : 'border-slate-200 dark:border-slate-700 hover:border-cf-orange/60';
+        return `<button type="button" onclick="applyBgPreset('${p.id}')" title="${p.name}"
+          class="relative aspect-video rounded-lg overflow-hidden border transition-all ${frame}"
+          style="background-image:url('${p.path}');background-size:cover;background-position:center">
+          <span class="absolute inset-x-0 bottom-0 px-1 py-0.5 text-[10px] leading-tight text-white bg-black/45 text-center truncate">${p.name}</span>
+        </button>`;
+      }).join('');
+      const status = document.getElementById('bg-preset-status');
+      if (status) {
+        const hit = findBgPreset(current);
+        status.textContent = hit ? '已选择：' + hit.name : '未选择内置背景';
+      }
+    }
+
+    function applyBgPreset(id) {
+      const preset = BG_PRESETS.find(p => p.id === id);
+      if (!preset) return;
+      const s = { ...loadBgSettings(), image: preset.path };
+      if (!tryPersistBg(s)) { alert('保存失败：本地存储不可用'); return; }
+      const input = document.getElementById('bg-url-input');
+      if (input) input.value = '';
+      applyBgSettings(s);
+      updateBgSettingLabels(s);
+    }
+    window.applyBgPreset = applyBgPreset;
     // 内存缓存：避免每次拖动滑块都重新 JSON.parse 几 MB 的 base64 图片
     let bgCache = null;
     let bgPersistTimer = null;
@@ -459,6 +506,7 @@
         bg.style.backgroundImage = img ? `url("${img}")` : 'none';
       }
       applyAutoTextShadow(s.fgAlpha != null ? s.fgAlpha : 92);
+      renderBgPresets();
     }
 
     // 前景透明度越低，文字对比越强：强制高对比文字色 + 加阴影（深色主题白字黑影 / 浅色主题黑字白影）
@@ -486,7 +534,8 @@
       setText('bg-brightness-val', (s.brightness || 100) + '%');
       setText('fg-alpha-val', (s.fgAlpha != null ? s.fgAlpha : 92) + '%');
       setText('fg-brightness-val', (s.fgBrightness || 100) + '%');
-      setText('bg-image-status', s.image ? '已设置背景图片' : '未设置背景');
+      const preset = findBgPreset(s.image || '');
+      setText('bg-image-status', s.image ? (preset ? '内置：' + preset.name : '已设置自定义图片') : '未设置背景');
     }
 
     function syncBgSettingsUI() {
