@@ -86,6 +86,7 @@ v0.3.6 起，账户可自行选择认证方式，两种方式都能正常使用�
 | 5 | README 仍写着作者本机路径 `C://Users//Giga//Desktop//...` | 已删除该「项目路径」小节 |
 | 6 | `Cargo.lock` 中本包版本仍为 0.3.3；`package.json` 的 `main` 指向不存在的 `index.js` | 版本同步为 0.3.6；移除 `main` 字段 |
 | 7 | `deploy_pages_local` 用 `lock().unwrap()`，锁中毒时会 panic | 改为 `map_err` 返回错误；同时清理 `lib.rs` 中其余 `unwrap()`（`account_id` 判空改用 `as_deref().unwrap_or("")`，路径归一化改用 `match`），当前文件已无 `unwrap()` |
+| 8 | 设置页内容整体贴左，右侧留大片空白（卡片只有 `max-w-2xl` 但没有居中） | 设置页整列（标题 + 卡片）改为 `max-w-2xl mx-auto`，在右侧内容区水平居中；标题与卡片左边缘保持对齐 |
 
 > 说明：以上均不改变既有功能行为，仅修体验与清理；版本号仍为 **0.3.6**。
 
