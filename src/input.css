@@ -135,7 +135,6 @@ html, body, body * {
   border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-<<<<<<< HEAD
 /* ===== 自定义背景图片与前景调节 ===== */
 #app-background {
   position: fixed;
@@ -187,8 +186,6 @@ html.low-fg.light #app-root :is(.text-slate-100, .text-slate-200, .text-slate-30
   color: #0f172a !important;
 }
 
-=======
->>>>>>> 772aff770c2b49ca0c5e932e21867ddc02126d3d
 .light input,
 .light select,
 .light textarea {
@@ -302,7 +299,6 @@ html.low-fg.light #app-root :is(.text-slate-100, .text-slate-200, .text-slate-30
 main {
   container-type: inline-size;
 }
-<<<<<<< HEAD
 
 /* 固定表头：纯色背景，内部滚动时不透显数据行 */
 .sticky-thead th {
@@ -312,8 +308,6 @@ main {
   background-color: #f1f5f9;
 }
 
-=======
->>>>>>> 772aff770c2b49ca0c5e932e21867ddc02126d3d
 .page-section {
   min-height: 100%;
 }

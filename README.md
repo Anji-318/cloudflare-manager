@@ -30,6 +30,7 @@ C:\Users\Giga\Desktop\cloudflare多账户管理系统
 - [x] Snippets：Snippet 列表、创建/编辑/删除，代码编辑器带行号显示
 - [x] Tunnels、Firewall、缓存清除、分析报表入口
 - [x] 深色/浅色主题切换
+- [x] 自定义背景：本地图片或图片 URL，支持背景模糊、背景明暗、前景透明度、前景明暗四项调节（设置页）
 
 ## 构建方式
 
@@ -124,6 +125,10 @@ cloudflare多账户管理系统/
 
 **提示 HTTP 400 / 6003 / 6111（Invalid format for Authorization header）？**  
 说明你填入的是 **Global API Key**，但认证方式仍是 API Token。两种方式的请求头完全不同：Token 用 `Authorization: Bearer`，Global API Key 用 `X-Auth-Email` + `X-Auth-Key`。请进入账户「编辑」，把认证方式切换为 **Global API Key** 并填写 Cloudflare 登录邮箱后重试（v0.3.6 起粘贴 37 位十六进制密钥会自动切换）。
+
+**设置背景图片后看不到效果？**  
+v0.3.6 已修复：此前 `src/input.css` 残留 Git 合并冲突标记，被编译进 `tailwind.css`，导致 `#app-background` 规则被浏览器丢弃，背景图完全不显示（本地图片与 URL 两种方式都会失效）。如果你用的是更早的构建，请重新 `npm run build`。  
+另外「前景透明度」默认 92%，面板接近不透明，背景只在窗口边缘和半透明处透出；想要背景更明显，把该滑块调到 70% 左右。
 
 **提示“无法获取 Account ID”？**  
 Token 缺少“帐户 - 帐户（读取）”权限，或 Account Resources 未包含目标账户。请重新生成 Token 后添加账户。
