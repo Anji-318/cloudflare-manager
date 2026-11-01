@@ -140,22 +140,45 @@
           <div class="flex-1">
             <h3 class="text-lg font-semibold text-slate-100 mb-3">添加到本应用</h3>
             <p class="text-slate-400 mb-4">打开应用 → 点击右上角 <strong>“添加账户”</strong> → 填写：</p>
-            <div class="grid gap-3 md:grid-cols-3">
+            <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
               <div class="p-4 rounded-xl bg-slate-700/30 border border-slate-600/50">
                 <strong class="text-green-400 block mb-1">账户名称</strong>
                 <span class="text-slate-300 text-sm">随便填，例如“我的账户”</span>
               </div>
               <div class="p-4 rounded-xl bg-slate-700/30 border border-slate-600/50">
-                <strong class="text-green-400 block mb-1">邮箱 / 描述</strong>
-                <span class="text-slate-300 text-sm">可选，用于备注</span>
+                <strong class="text-green-400 block mb-1">认证方式</strong>
+                <span class="text-slate-300 text-sm">API Token（推荐）或 Global API Key</span>
               </div>
               <div class="p-4 rounded-xl bg-slate-700/30 border border-slate-600/50">
-                <strong class="text-green-400 block mb-1">API Token</strong>
-                <span class="text-slate-300 text-sm">粘贴刚才复制的 Token</span>
+                <strong class="text-green-400 block mb-1">邮箱 / 描述</strong>
+                <span class="text-slate-300 text-sm">用 Global API Key 时必填（登录邮箱）</span>
+              </div>
+              <div class="p-4 rounded-xl bg-slate-700/30 border border-slate-600/50">
+                <strong class="text-green-400 block mb-1">API Token / Global Key</strong>
+                <span class="text-slate-300 text-sm">粘贴刚才复制的密钥</span>
               </div>
             </div>
             <p class="text-slate-400 mt-4">点击 <strong>“验证并保存”</strong>，如果 Token 有效，应用会自动获取 Account ID 并加载域名列表。</p>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Global API Key -->
+    <section class="card bg-slate-800/60 border border-slate-700/50 p-6 mb-8">
+      <h2 class="text-xl font-bold text-amber-400 mb-4 flex items-center gap-2">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+        使用 Global API Key（全局 API 密钥）
+      </h2>
+      <div class="space-y-4 text-slate-300">
+        <p class="text-slate-400">如果你不想逐个勾选 Token 权限，也可以直接使用账号的 Global API Key。它拥有该账号的全部权限，适合自用环境，安全性低于 API Token。</p>
+        <ol class="list-decimal list-inside space-y-2 text-slate-300">
+          <li>打开 <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer" class="text-green-400 underline">我的个人资料 → API 令牌</a>。</li>
+          <li>在 <strong>API 密钥</strong> 区域点击 <strong>Global API Key</strong> 右侧的 <strong>查看</strong>，完成验证后复制该密钥（37 位十六进制字符）。</li>
+          <li>回到应用 → <strong>添加账户</strong> → 认证方式选择 <strong>Global API Key</strong>，并填写 <strong>Cloudflare 登录邮箱</strong>（必须与密钥同属一个账号）。</li>
+        </ol>
+        <div class="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-sm text-amber-300">
+          两种认证方式的请求头不同：API Token 使用 <code class="bg-slate-700/50 px-1.5 py-0.5 rounded">Authorization: Bearer &lt;token&gt;</code>；Global API Key 使用 <code class="bg-slate-700/50 px-1.5 py-0.5 rounded">X-Auth-Email</code> + <code class="bg-slate-700/50 px-1.5 py-0.5 rounded">X-Auth-Key</code>。把 Global API Key 当成 Token 提交时，Cloudflare 会返回 <strong>6003 / 6111</strong>（Invalid format for Authorization header），应用已能自动识别并提示切换。
         </div>
       </div>
     </section>
@@ -170,6 +193,10 @@
         <div>
           <h4 class="font-semibold text-slate-100">Token 验证失败？</h4>
           <p class="text-slate-400 text-sm">请确认 Token 已启用、权限至少包含 <strong>帐户 - 帐户（读取）</strong>、<strong>帐户 - 帐户设置（读取）</strong>和<strong>区域 - 区域（读取）</strong>，且资源范围包含你的账户/域名。</p>
+        </div>
+        <div>
+          <h4 class="font-semibold text-slate-100">提示 6003 / 6111（Invalid format for Authorization header）？</h4>
+          <p class="text-slate-400 text-sm">说明你把 <strong>Global API Key</strong> 当成了 API Token。请在账户编辑里把认证方式切换为 <strong>Global API Key</strong> 并填写登录邮箱；应用在粘贴 37 位十六进制密钥时也会自动切换。</p>
         </div>
         <div>
           <h4 class="font-semibold text-slate-100">某些页面没有数据？</h4>

@@ -968,17 +968,28 @@
             <input id="acc-name" type="text" placeholder="例如：Acme Corp" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
           </div>
           <div>
-            <label class="block text-sm font-medium mb-2">邮箱 / 备注</label>
+            <label class="block text-sm font-medium mb-2">认证方式</label>
+            <div class="grid grid-cols-2 gap-2">
+              <button type="button" id="acc-auth-token" onclick="setAuthType('add','token')" data-auth-btn="token" class="px-3 py-2 rounded-xl border text-xs font-medium transition-colors border-cf-orange bg-cf-orange/10 text-cf-orange">API Token（推荐）</button>
+              <button type="button" id="acc-auth-global_key" onclick="setAuthType('add','global_key')" data-auth-btn="global_key" class="px-3 py-2 rounded-xl border text-xs font-medium transition-colors border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">Global API Key</button>
+            </div>
+            <p id="acc-auth-desc" class="text-xs text-slate-500 mt-1.5">API Token 可精细控制权限范围，推荐优先使用。</p>
+            <div id="acc-auth-warning" class="hidden mt-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-600 dark:text-amber-400">
+              Global API Key 拥有该账号的全部权限，安全性低于 API Token。请到 <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer" class="underline">我的个人资料 → API 令牌</a> 页查看「Global API Key」（37 位十六进制），并填写与该密钥对应的 Cloudflare 登录邮箱。
+            </div>
+          </div>
+          <div>
+            <label id="acc-email-label" class="block text-sm font-medium mb-2">邮箱 / 备注</label>
             <input id="acc-email" type="text" placeholder="admin@example.com" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
           </div>
           <div>
-            <label class="block text-sm font-medium mb-2">API Token</label>
+            <label id="acc-token-label" class="block text-sm font-medium mb-2">API Token</label>
             <div class="relative">
               <input id="acc-token" type="password" autocomplete="new-password" placeholder="输入 Cloudflare API Token" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-cf-orange pr-12">
               <button type="button" id="token-toggle-btn" onclick="toggleTokenVisibility()" class="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-200/10 dark:hover:bg-slate-700/30 transition-colors"><svg id="token-toggle-icon" class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg></button>
             </div>
-            <p class="text-xs text-slate-500 mt-2">Token 将使用系统级加密安全存储，不会以明文保存。</p>
-            <div class="mt-2 p-3 rounded-xl bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 text-xs text-slate-500">
+            <p class="text-xs text-slate-500 mt-2">密钥将使用系统级加密（AES-256-GCM）安全存储，不会以明文保存。</p>
+            <div id="acc-token-perms" class="mt-2 p-3 rounded-xl bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 text-xs text-slate-500">
               <p class="mb-1">如需使用 <strong>Worker 路由/域名</strong> 或 <strong>Pages 自定义域名</strong>，请确保 Token 包含：</p>
               <div class="flex flex-wrap gap-1">
                 <span class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">帐户 - Workers 脚本 编辑</span>
@@ -1023,16 +1034,27 @@
             <input id="edit-acc-name" type="text" placeholder="例如：Acme Corp" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
           </div>
           <div>
-            <label class="block text-sm font-medium mb-2">邮箱 / 备注</label>
+            <label class="block text-sm font-medium mb-2">认证方式</label>
+            <div class="grid grid-cols-2 gap-2">
+              <button type="button" id="edit-acc-auth-token" onclick="setAuthType('edit','token')" data-auth-btn="token" class="px-3 py-2 rounded-xl border text-xs font-medium transition-colors border-cf-orange bg-cf-orange/10 text-cf-orange">API Token（推荐）</button>
+              <button type="button" id="edit-acc-auth-global_key" onclick="setAuthType('edit','global_key')" data-auth-btn="global_key" class="px-3 py-2 rounded-xl border text-xs font-medium transition-colors border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">Global API Key</button>
+            </div>
+            <p id="edit-acc-auth-desc" class="text-xs text-slate-500 mt-1.5">API Token 可精细控制权限范围，推荐优先使用。</p>
+            <div id="edit-acc-auth-warning" class="hidden mt-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-600 dark:text-amber-400">
+              Global API Key 拥有该账号的全部权限，安全性低于 API Token。请到 <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer" class="underline">我的个人资料 → API 令牌</a> 页查看「Global API Key」（37 位十六进制），并填写与该密钥对应的 Cloudflare 登录邮箱。
+            </div>
+          </div>
+          <div>
+            <label id="edit-acc-email-label" class="block text-sm font-medium mb-2">邮箱 / 备注</label>
             <input id="edit-acc-email" type="text" placeholder="admin@example.com" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:border-cf-orange">
           </div>
           <div>
-            <label class="block text-sm font-medium mb-2">API Token</label>
+            <label id="edit-acc-token-label" class="block text-sm font-medium mb-2">API Token</label>
             <div class="relative">
               <input id="edit-acc-token" type="password" autocomplete="new-password" placeholder="留空则保留原 Token" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-cf-orange pr-12">
               <button type="button" onclick="toggleEditTokenVisibility()" class="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-200/10 dark:hover:bg-slate-700/30 transition-colors"><svg id="edit-token-toggle-icon" class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg></button>
             </div>
-            <p class="text-xs text-slate-500 mt-2">留空则保留原来的 Token，填入新值会验证并更新。</p>
+            <p class="text-xs text-slate-500 mt-2">留空则保留原来的密钥，填入新值会验证并更新。</p>
           </div>
           <div class="flex gap-3 pt-2">
             <button onclick="closeEditAccount()" class="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm transition-colors">取消</button>

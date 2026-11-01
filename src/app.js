@@ -34,7 +34,10 @@
       accountTotalRequests: null,
       workersTotalRequests: null,
       accountZoneCounts: {},
-      editingAccountId: null
+      editingAccountId: null,
+      // 认证方式：'token'（API Token）| 'global_key'（Global API Key）
+      newAuthType: 'token',
+      editAuthType: 'token'
     };
 
     // 版本号不再硬编码，启动时从后端动态读取（编译自 Cargo.toml）
@@ -522,9 +525,80 @@
     }
     window.resetBgSettings = resetBgSettings;
 
+    const AUTH_LABELS = {
+      token: {
+        keyLabel: 'API Token',
+        keyPlaceholder: '输入 Cloudflare API Token',
+        emailLabel: '邮箱 / 备注',
+        emailPlaceholder: 'admin@example.com',
+        desc: 'API Token 可精细控制权限范围，推荐优先使用。'
+      },
+      global_key: {
+        keyLabel: 'Global API Key',
+        keyPlaceholder: '输入 Cloudflare Global API Key（37 位十六进制）',
+        emailLabel: '登录邮箱（必填）',
+        emailPlaceholder: 'your@email.com（Cloudflare 登录邮箱）',
+        desc: 'Global API Key 需配合 Cloudflare 登录邮箱使用，请求会以 X-Auth-Email + X-Auth-Key 头发送。'
+      }
+    };
+
+    function isGlobalKeyShape(value) {
+      return /^[0-9a-fA-F]{37}$/.test((value || '').trim());
+    }
+
+    function applyAuthTypeUI(scope, type) {
+      const cfg = AUTH_LABELS[type] || AUTH_LABELS.token;
+      const p = scope === 'edit' ? 'edit-acc-' : 'acc-';
+
+      [['token', p + 'auth-token'], ['global_key', p + 'auth-global_key']].forEach(([key, id]) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        const active = key === type;
+        btn.className = active
+          ? 'px-3 py-2 rounded-xl border text-xs font-medium transition-colors border-cf-orange bg-cf-orange/10 text-cf-orange'
+          : 'px-3 py-2 rounded-xl border text-xs font-medium transition-colors border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800';
+      });
+
+      const keyLabel = document.getElementById(p + 'token-label');
+      if (keyLabel) keyLabel.textContent = cfg.keyLabel;
+
+      const keyInput = document.getElementById(p + 'token');
+      if (keyInput) keyInput.placeholder = cfg.keyPlaceholder;
+
+      const emailLabel = document.getElementById(p + 'email-label');
+      if (emailLabel) emailLabel.textContent = cfg.emailLabel;
+
+      const emailInput = document.getElementById(p + 'email');
+      if (emailInput) emailInput.placeholder = cfg.emailPlaceholder;
+
+      const desc = document.getElementById(p + 'auth-desc');
+      if (desc) desc.textContent = cfg.desc;
+
+      const warning = document.getElementById(p + 'auth-warning');
+      if (warning) warning.classList.toggle('hidden', type !== 'global_key');
+
+      // API Token 的权限清单只对 Token 有意义
+      if (scope !== 'edit') {
+        const perms = document.getElementById('acc-token-perms');
+        if (perms) perms.classList.toggle('hidden', type === 'global_key');
+      }
+    }
+
+    function setAuthType(scope, type) {
+      if (scope === 'edit') {
+        appState.editAuthType = type;
+      } else {
+        appState.newAuthType = type;
+      }
+      applyAuthTypeUI(scope, type);
+    }
+    window.setAuthType = setAuthType;
+
     function openAddAccount() {
       document.getElementById('modal-add-account').classList.remove('hidden');
       resetTokenVisibility();
+      appState.newAuthType = 'token';
+      applyAuthTypeUI('add', 'token');
     }
 
     function closeAddAccount() {
@@ -559,17 +633,32 @@
       const name = document.getElementById('acc-name').value.trim();
       const email = document.getElementById('acc-email').value.trim();
       const token = document.getElementById('acc-token').value.trim();
-      
+      const authType = appState.newAuthType || 'token';
+      const authLabel = authType === 'global_key' ? 'Global API Key' : 'API Token';
+
       if (!name || !token) {
-        alert('账户名称和 API Token 不能为空');
+        alert('账户名称和 ' + authLabel + ' 不能为空');
+        return;
+      }
+      if (authType === 'global_key' && !email) {
+        alert('使用 Global API Key 时必须填写 Cloudflare 登录邮箱');
+        return;
+      }
+      if (authType === 'token' && isGlobalKeyShape(token)) {
+        // 37 位十六进制是 Global API Key 的格式，自动纠正，避免再撞 6003/6111 错误
+        appState.newAuthType = 'global_key';
+        applyAuthTypeUI('add', 'global_key');
+        alert('检测到该密钥是 Global API Key 格式（37 位十六进制），已自动切换认证方式。请补充 Cloudflare 登录邮箱后再保存。');
         return;
       }
       
       try {
-        // Validate token
-        const result = await callBackend('validate_token', { token });
+        const credential = { auth_type: authType, email, secret: token };
+
+        // 验证凭据：API Token 走 /user/tokens/verify，Global API Key 走 /user
+        const result = await callBackend('validate_credential', { credential });
         if (!result.success) {
-          alert('Token 验证失败：' + (result.errors[0]?.message || '未知错误'));
+          alert(authLabel + ' 验证失败：' + (result.errors?.[0]?.message || '未知错误'));
           return;
         }
         
@@ -578,10 +667,11 @@
           name,
           email,
           token_encrypted: '',
+          auth_type: authType,
           avatar: appState.newAvatar || null
         };
         
-        const savedAccount = await callBackend('save_account', { account, token });
+        const savedAccount = await callBackend('save_account', { account, credential });
         await callBackend('set_current_account', { account: savedAccount, token });
         appState.currentAccount = savedAccount;
         closeAddAccount();
@@ -637,6 +727,8 @@
       document.getElementById('edit-acc-token').value = '';
       resetEditTokenVisibility();
       resetAvatarPicker('edit-acc', account);
+      appState.editAuthType = account.auth_type || 'token';
+      applyAuthTypeUI('edit', appState.editAuthType);
       document.getElementById('modal-edit-account').classList.remove('hidden');
     }
     window.openEditAccount = openEditAccount;
@@ -675,52 +767,62 @@
       const name = document.getElementById('edit-acc-name').value.trim();
       const email = document.getElementById('edit-acc-email').value.trim();
       const newToken = document.getElementById('edit-acc-token').value.trim();
-      
+      const authType = appState.editAuthType || 'token';
+      const authLabel = authType === 'global_key' ? 'Global API Key' : 'API Token';
+
       if (!id || !name) {
         alert('账户名称不能为空');
         return;
       }
-      
+      if (authType === 'global_key' && !email) {
+        alert('使用 Global API Key 时必须填写 Cloudflare 登录邮箱');
+        return;
+      }
+
       const account = appState.accounts.find(a => a.id === id);
       if (!account) {
         alert('账户不存在');
         return;
       }
-      
+
       let token = newToken;
-      
-      // 如果 Token 留空，保留原 Token
+
+      // 如果密钥留空，保留原密钥
       if (!token) {
         try {
           token = await callBackend('get_account_token', { id });
         } catch (e) {
-          alert('获取原 Token 失败：' + e);
-          return;
-        }
-      } else {
-        // 验证新 Token
-        try {
-          const result = await callBackend('validate_token', { token });
-          if (!result.success) {
-            alert('Token 验证失败：' + (result.errors[0]?.message || '未知错误'));
-            return;
-          }
-        } catch (e) {
-          alert('Token 验证失败：' + e);
+          alert('获取原 ' + authLabel + ' 失败：' + e);
           return;
         }
       }
-      
+
+      const credential = { auth_type: authType, email, secret: token };
+
+      // 无论是否更换密钥都重新校验，确保切换认证方式后仍可用
+      try {
+        const result = await callBackend('validate_credential', { credential });
+        if (!result.success) {
+          alert(authLabel + ' 验证失败：' + (result.errors?.[0]?.message || '未知错误'));
+          return;
+        }
+      } catch (e) {
+        alert(authLabel + ' 验证失败：' + e);
+        return;
+      }
+
       const updatedAccount = {
         id,
         name,
         email,
+        account_id: account.account_id || null,
+        auth_type: authType,
         token_encrypted: account.token_encrypted || '',
         avatar: appState.editAvatar || null
       };
-      
+
       try {
-        const savedAccount = await callBackend('save_account', { account: updatedAccount, token });
+        const savedAccount = await callBackend('save_account', { account: updatedAccount, credential });
         
         // 如果编辑的是当前账户，更新当前账户状态
         if (appState.currentAccount?.id === id) {
@@ -829,7 +931,12 @@
               </div>
             </td>
             <td class="px-5 py-4 text-slate-400">${escapeHtml(acc.email || '-')}</td>
-            <td class="px-5 py-4"><span class="px-2 py-1 rounded-full text-xs bg-green-500/10 text-green-500">有效</span></td>
+            <td class="px-5 py-4">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-1 rounded-full text-xs bg-green-500/10 text-green-500">有效</span>
+                <span class="px-2 py-1 rounded-full text-xs ${acc.auth_type === 'global_key' ? 'bg-amber-500/10 text-amber-500' : 'bg-cf-blue/10 text-cf-blue'}">${acc.auth_type === 'global_key' ? 'Global Key' : 'API Token'}</span>
+              </div>
+            </td>
             <td class="px-5 py-4">${zoneCountDisplay}</td>
             <td class="px-5 py-4">
               <button onclick="startInlineEdit('${acc.id}')" class="text-cf-blue hover:underline text-xs mr-3">编辑</button>
@@ -893,41 +1000,54 @@
         return;
       }
       
+      const authType = account.auth_type || 'token';
+      const authLabel = authType === 'global_key' ? 'Global API Key' : 'API Token';
+
+      if (authType === 'global_key' && !email) {
+        alert('使用 Global API Key 时必须填写 Cloudflare 登录邮箱');
+        return;
+      }
+
       let token = newToken;
-      
-      // 如果 Token 留空，保留原 Token
+
+      // 如果密钥留空，保留原密钥
       if (!token) {
         try {
           token = await callBackend('get_account_token', { id });
         } catch (e) {
-          alert('获取原 Token 失败：' + e);
-          return;
-        }
-      } else {
-        // 验证新 Token
-        try {
-          const result = await callBackend('validate_token', { token });
-          if (!result.success) {
-            alert('Token 验证失败：' + (result.errors[0]?.message || '未知错误'));
-            return;
-          }
-        } catch (e) {
-          alert('Token 验证失败：' + e);
+          alert('获取原 ' + authLabel + ' 失败：' + e);
           return;
         }
       }
-      
+
+      const credential = { auth_type: authType, email, secret: token };
+
+      // 换了密钥、或 Global API Key 换了邮箱，都需要重新校验
+      if (newToken || (authType === 'global_key' && email !== (account.email || ''))) {
+        try {
+          const result = await callBackend('validate_credential', { credential });
+          if (!result.success) {
+            alert(authLabel + ' 验证失败：' + (result.errors?.[0]?.message || '未知错误'));
+            return;
+          }
+        } catch (e) {
+          alert(authLabel + ' 验证失败：' + e);
+          return;
+        }
+      }
+
       const updatedAccount = {
         id,
         name,
         email,
         account_id: account.account_id,
+        auth_type: authType,
         token_encrypted: account.token_encrypted || '',
         avatar: account.avatar || null
       };
-      
+
       try {
-        const savedAccount = await callBackend('save_account', { account: updatedAccount, token });
+        const savedAccount = await callBackend('save_account', { account: updatedAccount, credential });
         
         // 如果编辑的是当前账户，更新当前账户状态
         if (appState.currentAccount?.id === id) {
@@ -1501,9 +1621,10 @@
       }
 
       setApiStatus('checking', '检测中...');
+      const isGlobalKey = appState.currentAccount.auth_type === 'global_key';
       try {
-        // 优先使用官方 Token 验证接口
-        const result = await cfRequest('GET', '/user/tokens/verify');
+        // API Token 用 /user/tokens/verify；Global API Key 不支持该接口，改用 /user
+        const result = await cfRequest('GET', isGlobalKey ? '/user' : '/user/tokens/verify');
         if (result.success) {
           setApiStatus('ok', 'API 连接正常');
           return;
@@ -1521,14 +1642,14 @@
           if (msg.includes('timeout') || msg.includes('timed out')) {
             setApiStatus('warn', 'API 响应超时');
           } else if (msg.includes('401') || msg.includes('403') || msg.includes('unauthorized') || msg.includes('invalid')) {
-            setApiStatus('error', 'Token 无效');
+            setApiStatus('error', isGlobalKey ? 'Global Key 无效' : 'Token 无效');
           } else {
             setApiStatus('error', 'API 连接异常');
           }
           return;
         }
       }
-      setApiStatus('error', 'Token 无效');
+      setApiStatus('error', isGlobalKey ? 'Global Key 无效' : 'Token 无效');
     }
     window.refreshApiStatus = refreshApiStatus;
 
@@ -4307,6 +4428,15 @@
       loadAccounts();
       applyBgSettings();
       syncBgSettingsUI();
+
+      // Global API Key 是 37 位十六进制，粘贴后自动切换认证方式，避免再触发 6003/6111 错误
+      [['acc-token', 'add'], ['edit-acc-token', 'edit']].forEach(([id, scope]) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('input', () => {
+          if (isGlobalKeyShape(el.value)) setAuthType(scope, 'global_key');
+        });
+      });
       // 每 60 秒刷新一次 API 连接状态
       setInterval(() => {
         if (appState.currentAccount) refreshApiStatus();

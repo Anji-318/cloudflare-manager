@@ -49,6 +49,18 @@ where
     Err(format!("网络请求失败（已重试3次）: {}", last_err))
 }
 
+/// Cloudflare 认证方式
+///
+/// - `Token`：`Authorization: Bearer <token>`，推荐方式，可精细控制权限范围
+/// - `GlobalKey`：`X-Auth-Email` + `X-Auth-Key`，全局 API 密钥，拥有账户全部权限
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthType {
+    #[default]
+    Token,
+    GlobalKey,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Account {
     pub id: String,
@@ -56,9 +68,106 @@ pub struct Account {
     pub email: String,
     pub account_id: Option<String>,
     pub token_encrypted: String,
+    /// 认证方式；旧数据无此字段时按 API Token 处理
+    #[serde(default)]
+    pub auth_type: AuthType,
     /// 自定义头像（data URL，96x96 JPEG）；旧数据无此字段时为 None
     #[serde(default)]
     pub avatar: Option<String>,
+}
+
+/// 前端提交的凭据（新增/编辑账户、验证凭据时使用）
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Credential {
+    #[serde(default)]
+    pub auth_type: AuthType,
+    #[serde(default)]
+    pub email: String,
+    pub secret: String,
+}
+
+/// 运行期使用的认证信息（已解密）
+#[derive(Debug, Clone)]
+pub struct CfAuth {
+    pub auth_type: AuthType,
+    pub secret: String,
+    pub email: String,
+}
+
+impl CfAuth {
+    fn from_credential(cred: &Credential) -> Self {
+        Self {
+            auth_type: cred.auth_type,
+            secret: cred.secret.trim().to_string(),
+            email: cred.email.trim().to_string(),
+        }
+    }
+
+    fn from_account(account: &Account, secret: String) -> Self {
+        Self {
+            auth_type: account.auth_type,
+            secret,
+            email: account.email.trim().to_string(),
+        }
+    }
+
+    fn label(&self) -> &'static str {
+        match self.auth_type {
+            AuthType::Token => "API Token",
+            AuthType::GlobalKey => "Global API Key",
+        }
+    }
+}
+
+/// 按认证方式附加请求头：
+/// - API Token → `Authorization: Bearer xxx`
+/// - Global API Key → `X-Auth-Email` + `X-Auth-Key`
+fn apply_auth(req: reqwest::RequestBuilder, auth: &CfAuth) -> reqwest::RequestBuilder {
+    match auth.auth_type {
+        AuthType::Token => req.header("Authorization", format!("Bearer {}", auth.secret)),
+        AuthType::GlobalKey => req
+            .header("X-Auth-Email", auth.email.clone())
+            .header("X-Auth-Key", auth.secret.clone()),
+    }
+}
+
+/// 把 Cloudflare 的原始错误翻译成可操作的中文提示。
+/// 关键场景：用户把 Global API Key 当成 API Token 提交时，Cloudflare 会返回
+/// `code 6003 Invalid request headers` + `code 6111 Invalid format for Authorization header`。
+fn format_cf_error(status: reqwest::StatusCode, text: &str, auth: &CfAuth) -> String {
+    let lower = text.to_lowercase();
+    let header_mismatch = text.contains("6111")
+        || text.contains("6003")
+        || lower.contains("invalid format for authorization header")
+        || lower.contains("invalid request headers");
+
+    if header_mismatch {
+        return match auth.auth_type {
+            AuthType::Token => format!(
+                "认证失败（HTTP {}）：当前按 API Token 方式发送（Authorization: Bearer ...），但 Cloudflare 判定该密钥格式不合法。\n\
+                 这通常说明你填入的是 Global API Key。请把「认证方式」切换为 Global API Key，并填写 Cloudflare 登录邮箱后重试。\n\
+                 原始响应：{}",
+                status, text
+            ),
+            AuthType::GlobalKey => format!(
+                "认证失败（HTTP {}）：Global API Key 必须与 Cloudflare 登录邮箱严格对应（X-Auth-Email + X-Auth-Key）。\n\
+                 请确认邮箱填写正确，且密钥完整（37 位十六进制字符，可在 Dashboard → 我的个人资料 → API 令牌 页查看）。\n\
+                 原始响应：{}",
+                status, text
+            ),
+        };
+    }
+
+    if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+        return format!(
+            "认证失败（HTTP {}）：{} 无效，或缺少访问该资源的权限。\n原始响应：{}",
+            status,
+            auth.label(),
+            text
+        );
+    }
+
+    format!("HTTP {}: {}", status, text)
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -154,7 +263,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            validate_token,
+            validate_credential,
             get_app_version,
             update_account_avatar,
             count_zones,
@@ -186,17 +295,36 @@ pub fn run() {
 }
 
 // Cloudflare HTTP helpers
-async fn cf_get<T: serde::de::DeserializeOwned>(
-    token: &str,
+async fn cf_send<T: serde::de::DeserializeOwned>(
+    auth: &CfAuth,
+    method: &str,
     path: &str,
+    body: Option<serde_json::Value>,
 ) -> Result<CloudflareResponse<T>, String> {
+    let method_upper = method.to_uppercase();
+    if !matches!(method_upper.as_str(), "GET" | "POST" | "PUT" | "PATCH" | "DELETE") {
+        return Err(format!("Unsupported HTTP method: {}", method));
+    }
+
     let client = http_client();
     let url = format!("https://api.cloudflare.com/client/v4{}", path);
+    let auth_clone = auth.clone();
+    let body_clone = body.clone();
+    let method_owned = method_upper.clone();
+
     let res = send_with_retry(|| {
-        client
-            .get(&url)
-            .header("Authorization", format!("Bearer {}", token))
-            .header("Content-Type", "application/json")
+        let mut req = match method_owned.as_str() {
+            "POST" => client.post(&url),
+            "PUT" => client.put(&url),
+            "PATCH" => client.patch(&url),
+            "DELETE" => client.delete(&url),
+            _ => client.get(&url),
+        };
+        req = apply_auth(req, &auth_clone).header("Content-Type", "application/json");
+        if let Some(ref b) = body_clone {
+            req = req.json(b);
+        }
+        req
     })
     .await?;
 
@@ -204,92 +332,63 @@ async fn cf_get<T: serde::de::DeserializeOwned>(
     let text = res.text().await.map_err(|e| e.to_string())?;
 
     if !status.is_success() {
-        return Err(format!("HTTP {}: {}", status, text));
+        return Err(format_cf_error(status, &text, auth));
     }
 
     serde_json::from_str(&text).map_err(|e| format!("JSON parse error: {} | response: {}", e, text))
+}
+
+async fn cf_get<T: serde::de::DeserializeOwned>(
+    auth: &CfAuth,
+    path: &str,
+) -> Result<CloudflareResponse<T>, String> {
+    cf_send(auth, "GET", path, None).await
 }
 
 async fn cf_post<T: serde::de::DeserializeOwned>(
-    token: &str,
+    auth: &CfAuth,
     path: &str,
     body: serde_json::Value,
 ) -> Result<CloudflareResponse<T>, String> {
-    let client = http_client();
-    let url = format!("https://api.cloudflare.com/client/v4{}", path);
-    let res = send_with_retry(|| {
-        client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", token))
-            .header("Content-Type", "application/json")
-            .json(&body)
-    })
-    .await?;
-
-    let status = res.status();
-    let text = res.text().await.map_err(|e| e.to_string())?;
-
-    if !status.is_success() {
-        return Err(format!("HTTP {}: {}", status, text));
-    }
-
-    serde_json::from_str(&text).map_err(|e| format!("JSON parse error: {} | response: {}", e, text))
+    cf_send(auth, "POST", path, Some(body)).await
 }
 
 async fn cf_patch<T: serde::de::DeserializeOwned>(
-    token: &str,
+    auth: &CfAuth,
     path: &str,
     body: serde_json::Value,
 ) -> Result<CloudflareResponse<T>, String> {
-    let client = http_client();
-    let url = format!("https://api.cloudflare.com/client/v4{}", path);
-    let res = send_with_retry(|| {
-        client
-            .patch(&url)
-            .header("Authorization", format!("Bearer {}", token))
-            .header("Content-Type", "application/json")
-            .json(&body)
-    })
-    .await?;
-
-    let status = res.status();
-    let text = res.text().await.map_err(|e| e.to_string())?;
-
-    if !status.is_success() {
-        return Err(format!("HTTP {}: {}", status, text));
-    }
-
-    serde_json::from_str(&text).map_err(|e| format!("JSON parse error: {} | response: {}", e, text))
+    cf_send(auth, "PATCH", path, Some(body)).await
 }
 
 async fn cf_delete<T: serde::de::DeserializeOwned>(
-    token: &str,
+    auth: &CfAuth,
     path: &str,
 ) -> Result<CloudflareResponse<T>, String> {
-    let client = http_client();
-    let url = format!("https://api.cloudflare.com/client/v4{}", path);
-    let res = send_with_retry(|| {
-        client
-            .delete(&url)
-            .header("Authorization", format!("Bearer {}", token))
-            .header("Content-Type", "application/json")
-    })
-    .await?;
-
-    let status = res.status();
-    let text = res.text().await.map_err(|e| e.to_string())?;
-
-    if !status.is_success() {
-        return Err(format!("HTTP {}: {}", status, text));
-    }
-
-    serde_json::from_str(&text).map_err(|e| format!("JSON parse error: {} | response: {}", e, text))
+    cf_send(auth, "DELETE", path, None).await
 }
 
 // Commands
+/// 校验凭据是否可用。
+/// - API Token：调用 `/user/tokens/verify`（Token 专用接口）
+/// - Global API Key：调用 `/user`（该接口不接受 Bearer Token，必须用邮箱 + 密钥头）
 #[tauri::command]
-async fn validate_token(token: String) -> Result<CloudflareResponse<serde_json::Value>, String> {
-    cf_get(&token, "/user/tokens/verify").await
+async fn validate_credential(
+    credential: Credential,
+) -> Result<CloudflareResponse<serde_json::Value>, String> {
+    let auth = CfAuth::from_credential(&credential);
+    if auth.secret.is_empty() {
+        return Err("凭据不能为空".to_string());
+    }
+    match auth.auth_type {
+        AuthType::Token => cf_get(&auth, "/user/tokens/verify").await,
+        AuthType::GlobalKey => {
+            if auth.email.is_empty() {
+                return Err("使用 Global API Key 时必须填写 Cloudflare 登录邮箱".to_string());
+            }
+            cf_get(&auth, "/user").await
+        }
+    }
 }
 
 #[tauri::command]
@@ -302,13 +401,26 @@ fn get_app_version() -> String {
 async fn save_account(
     app: AppHandle,
     mut account: Account,
-    token: String,
+    credential: Credential,
 ) -> Result<Account, String> {
-    account.token_encrypted = encrypt_token(&token)?;
-    
+    // 以凭据为准同步认证方式与邮箱，避免前后端字段不一致
+    account.auth_type = credential.auth_type;
+    if !credential.email.trim().is_empty() {
+        account.email = credential.email.trim().to_string();
+    }
+    if credential.secret.trim().is_empty() {
+        return Err("API Token / Global API Key 不能为空".to_string());
+    }
+    if account.auth_type == AuthType::GlobalKey && account.email.trim().is_empty() {
+        return Err("使用 Global API Key 时必须填写 Cloudflare 登录邮箱（与密钥对应同一个账号）".to_string());
+    }
+
+    let auth = CfAuth::from_credential(&credential);
+    account.token_encrypted = encrypt_token(&auth.secret)?;
+
     // Auto-fetch Cloudflare account ID if not provided
     if account.account_id.is_none() || account.account_id.as_ref().unwrap().is_empty() {
-        let resp: CloudflareResponse<Vec<serde_json::Value>> = cf_get(&token, "/accounts").await?;
+        let resp: CloudflareResponse<Vec<serde_json::Value>> = cf_get(&auth, "/accounts").await?;
         if let Some(accounts) = resp.result {
             if let Some(first) = accounts.first() {
                 if let Some(id) = first.get("id").and_then(|v| v.as_str()) {
@@ -317,7 +429,10 @@ async fn save_account(
             }
         }
         if account.account_id.is_none() || account.account_id.as_ref().unwrap().is_empty() {
-            return Err("无法获取 Account ID，请确认 Token 拥有“帐户 - 帐户（读取）”权限，并且 Account Resources 包含目标账户。".to_string());
+            return Err(
+                "无法获取 Account ID。请确认凭据拥有“帐户 - 帐户（读取）”权限（Global API Key 默认拥有全部权限），并且 Account Resources 包含目标账户。"
+                    .to_string(),
+            );
         }
     }
     
@@ -377,10 +492,11 @@ async fn count_zones(app: AppHandle, id: String) -> Result<i64, String> {
         .iter()
         .find(|a| a.id == id)
         .ok_or("Account not found")?;
-    let token = decrypt_token(&account.token_encrypted)?;
+    let secret = decrypt_token(&account.token_encrypted)?;
+    let auth = CfAuth::from_account(account, secret);
     // per_page=1 只需拿 result_info.total_count，一次请求得到精确总数（自动含分页）
     let resp: CloudflareResponse<Vec<serde_json::Value>> =
-        cf_get(&token, "/zones?per_page=1").await?;
+        cf_get(&auth, "/zones?per_page=1").await?;
     if !resp.success {
         return Err(format!(
             "Cloudflare API error: {}",
@@ -448,7 +564,7 @@ fn get_current_account(state: State<AppState>) -> Result<Option<Account>, String
     Ok(current.clone())
 }
 
-fn get_current_token(state: &State<AppState>) -> Result<String, String> {
+fn get_current_auth(state: &State<AppState>) -> Result<CfAuth, String> {
     let id = state
         .current_account_id
         .lock()
@@ -464,13 +580,14 @@ fn get_current_token(state: &State<AppState>) -> Result<String, String> {
         .iter()
         .find(|a| a.id == id)
         .ok_or_else(|| "Current account not found".to_string())?;
-    decrypt_token(&account.token_encrypted)
+    let secret = decrypt_token(&account.token_encrypted)?;
+    Ok(CfAuth::from_account(account, secret))
 }
 
 #[tauri::command]
 async fn list_zones(state: State<'_, AppState>) -> Result<CloudflareResponse<Vec<serde_json::Value>>, String> {
-    let token = get_current_token(&state)?;
-    cf_get(&token, "/zones").await
+    let auth = get_current_auth(&state)?;
+    cf_get(&auth, "/zones").await
 }
 
 #[tauri::command]
@@ -478,8 +595,8 @@ async fn list_dns_records(
     state: State<'_, AppState>,
     zone_id: String,
 ) -> Result<CloudflareResponse<Vec<serde_json::Value>>, String> {
-    let token = get_current_token(&state)?;
-    cf_get(&token, &format!("/zones/{}/dns_records", zone_id)).await
+    let auth = get_current_auth(&state)?;
+    cf_get(&auth, &format!("/zones/{}/dns_records", zone_id)).await
 }
 
 #[tauri::command]
@@ -488,8 +605,8 @@ async fn add_dns_record(
     zone_id: String,
     record: serde_json::Value,
 ) -> Result<CloudflareResponse<serde_json::Value>, String> {
-    let token = get_current_token(&state)?;
-    cf_post(&token, &format!("/zones/{}/dns_records", zone_id), record).await
+    let auth = get_current_auth(&state)?;
+    cf_post(&auth, &format!("/zones/{}/dns_records", zone_id), record).await
 }
 
 #[tauri::command]
@@ -499,8 +616,8 @@ async fn update_dns_record(
     record_id: String,
     record: serde_json::Value,
 ) -> Result<CloudflareResponse<serde_json::Value>, String> {
-    let token = get_current_token(&state)?;
-    cf_patch(&token, &format!("/zones/{}/dns_records/{}", zone_id, record_id), record).await
+    let auth = get_current_auth(&state)?;
+    cf_patch(&auth, &format!("/zones/{}/dns_records/{}", zone_id, record_id), record).await
 }
 
 #[tauri::command]
@@ -509,8 +626,8 @@ async fn delete_dns_record(
     zone_id: String,
     record_id: String,
 ) -> Result<CloudflareResponse<serde_json::Value>, String> {
-    let token = get_current_token(&state)?;
-    cf_delete(&token, &format!("/zones/{}/dns_records/{}", zone_id, record_id)).await
+    let auth = get_current_auth(&state)?;
+    cf_delete(&auth, &format!("/zones/{}/dns_records/{}", zone_id, record_id)).await
 }
 
 #[tauri::command]
@@ -518,8 +635,8 @@ async fn purge_cache(
     state: State<'_, AppState>,
     zone_id: String,
 ) -> Result<CloudflareResponse<serde_json::Value>, String> {
-    let token = get_current_token(&state)?;
-    cf_post(&token, &format!("/zones/{}/purge_cache", zone_id), serde_json::json!({"purge_everything": true})).await
+    let auth = get_current_auth(&state)?;
+    cf_post(&auth, &format!("/zones/{}/purge_cache", zone_id), serde_json::json!({"purge_everything": true})).await
 }
 
 #[tauri::command]
@@ -559,13 +676,13 @@ async fn cloudflare_request(
     path: String,
     body: Option<serde_json::Value>,
 ) -> Result<CloudflareResponse<serde_json::Value>, String> {
-    let token = get_current_token(&state)?;
+    let auth = get_current_auth(&state)?;
     match method.to_uppercase().as_str() {
-        "GET" => cf_get(&token, &path).await,
-        "POST" => cf_post(&token, &path, body.unwrap_or(serde_json::json!({}))).await,
-        "PUT" => cf_put(&token, &path, body.unwrap_or(serde_json::json!({}))).await,
-        "PATCH" => cf_patch(&token, &path, body.unwrap_or(serde_json::json!({}))).await,
-        "DELETE" => cf_delete(&token, &path).await,
+        "GET" => cf_get(&auth, &path).await,
+        "POST" => cf_post(&auth, &path, body.unwrap_or(serde_json::json!({}))).await,
+        "PUT" => cf_put(&auth, &path, body.unwrap_or(serde_json::json!({}))).await,
+        "PATCH" => cf_patch(&auth, &path, body.unwrap_or(serde_json::json!({}))).await,
+        "DELETE" => cf_delete(&auth, &path).await,
         _ => Err(format!("Unsupported HTTP method: {}", method)),
     }
 }
@@ -578,7 +695,7 @@ async fn cloudflare_request_text(
     body: Option<serde_json::Value>,
     content_type: Option<String>,
 ) -> Result<String, String> {
-    let token = get_current_token(&state)?;
+    let auth = get_current_auth(&state)?;
     let client = http_client();
     let url = format!("https://api.cloudflare.com/client/v4{}", path);
 
@@ -590,6 +707,7 @@ async fn cloudflare_request_text(
 
     let content_type_clone = content_type.clone();
     let body_clone = body.clone();
+    let auth_clone = auth.clone();
     let res = send_with_retry(|| {
         let mut req = match method_str {
             "GET" => client.get(&url),
@@ -599,9 +717,7 @@ async fn cloudflare_request_text(
             "DELETE" => client.delete(&url),
             _ => unreachable!(),
         };
-        req = req
-            .header("Authorization", format!("Bearer {}", token))
-            .timeout(Duration::from_secs(120));
+        req = apply_auth(req, &auth_clone).timeout(Duration::from_secs(120));
         if let Some(ref ct) = content_type_clone {
             req = req.header("Content-Type", ct.clone());
         }
@@ -625,10 +741,29 @@ async fn cloudflare_request_text(
     let text = res.text().await.map_err(|e| e.to_string())?;
 
     if !status.is_success() {
-        return Err(format!("HTTP {}: {}", status, text));
+        return Err(format_cf_error(status, &text, &auth));
     }
 
     Ok(text)
+}
+
+/// 为 wrangler 子进程注入凭据环境变量。
+/// - API Token：`CLOUDFLARE_API_TOKEN`
+/// - Global API Key：`CLOUDFLARE_API_KEY` + `CLOUDFLARE_EMAIL`
+fn apply_wrangler_env(cmd: &mut tokio::process::Command, auth: &CfAuth) {
+    cmd.env("NO_COLOR", "1");
+    match auth.auth_type {
+        AuthType::Token => {
+            cmd.env("CLOUDFLARE_API_TOKEN", &auth.secret);
+            cmd.env_remove("CLOUDFLARE_API_KEY");
+            cmd.env_remove("CLOUDFLARE_EMAIL");
+        }
+        AuthType::GlobalKey => {
+            cmd.env("CLOUDFLARE_API_KEY", &auth.secret);
+            cmd.env("CLOUDFLARE_EMAIL", &auth.email);
+            cmd.env_remove("CLOUDFLARE_API_TOKEN");
+        }
+    }
 }
 
 #[tauri::command]
@@ -640,7 +775,7 @@ async fn deploy_pages_local(
     environment: String,
     env_vars: Vec<PagesEnvVar>,
 ) -> Result<String, String> {
-    let token = get_current_token(&state)?;
+    let auth = get_current_auth(&state)?;
     let account = state
         .current_account
         .lock()
@@ -667,30 +802,31 @@ async fn deploy_pages_local(
             }
         });
         let path = format!("/accounts/{}/pages/projects/{}", account_id, project_name);
-        cf_patch::<serde_json::Value>(&token, &path, patch_body).await.map_err(|e| {
+        cf_patch::<serde_json::Value>(&auth, &path, patch_body).await.map_err(|e| {
             format!("设置 Pages 环境变量失败：{}", e)
         })?;
     }
 
     // 2. 调用 wrangler pages deploy 上传本地目录
-    let output = tokio::process::Command::new("cmd")
-        .args(&[
-            "/C",
-            "npx",
-            "--yes",
-            "wrangler",
-            "pages",
-            "deploy",
-            &directory,
-            "--project-name",
-            &project_name,
-            "--branch",
-            &branch,
-            "--commit-dirty=true",
-        ])
-        .env("CLOUDFLARE_API_TOKEN", &token)
-        .env("CLOUDFLARE_ACCOUNT_ID", &account_id)
-        .env("NO_COLOR", "1")
+    let mut cmd = tokio::process::Command::new("cmd");
+    cmd.args(&[
+        "/C",
+        "npx",
+        "--yes",
+        "wrangler",
+        "pages",
+        "deploy",
+        &directory,
+        "--project-name",
+        &project_name,
+        "--branch",
+        &branch,
+        "--commit-dirty=true",
+    ])
+    .env("CLOUDFLARE_ACCOUNT_ID", &account_id);
+    apply_wrangler_env(&mut cmd, &auth);
+
+    let output = cmd
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .output()
@@ -706,29 +842,11 @@ async fn deploy_pages_local(
 }
 
 async fn cf_put<T: serde::de::DeserializeOwned>(
-    token: &str,
+    auth: &CfAuth,
     path: &str,
     body: serde_json::Value,
 ) -> Result<CloudflareResponse<T>, String> {
-    let client = http_client();
-    let url = format!("https://api.cloudflare.com/client/v4{}", path);
-    let res = send_with_retry(|| {
-        client
-            .put(&url)
-            .header("Authorization", format!("Bearer {}", token))
-            .header("Content-Type", "application/json")
-            .json(&body)
-    })
-    .await?;
-
-    let status = res.status();
-    let text = res.text().await.map_err(|e| e.to_string())?;
-
-    if !status.is_success() {
-        return Err(format!("HTTP {}: {}", status, text));
-    }
-
-    serde_json::from_str(&text).map_err(|e| format!("JSON parse error: {} | response: {}", e, text))
+    cf_send(auth, "PUT", path, Some(body)).await
 }
 
 // ============================================================================
@@ -925,7 +1043,7 @@ async fn upsert_hashes(jwt: &str, hashes: Vec<String>) -> Result<(), String> {
 }
 
 async fn create_pages_deployment(
-    token: &str,
+    auth: &CfAuth,
     account_id: &str,
     project_name: &str,
     manifest: HashMap<String, String>,
@@ -937,12 +1055,11 @@ async fn create_pages_deployment(
     );
 
     let manifest_json = serde_json::to_string(&manifest).map_err(|e| e.to_string())?;
+    let auth_clone = auth.clone();
 
     let res = send_with_retry(|| {
         let form = reqwest::multipart::Form::new().text("manifest", manifest_json.clone());
-        client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", token))
+        apply_auth(client.post(&url), &auth_clone)
             .multipart(form)
             .timeout(Duration::from_secs(120))
     })
@@ -951,7 +1068,7 @@ async fn create_pages_deployment(
     let status = res.status();
     let text = res.text().await.map_err(|e| e.to_string())?;
     if !status.is_success() {
-        return Err(format!("HTTP {}: {}", status, text));
+        return Err(format_cf_error(status, &text, auth));
     }
     let envelope: CloudflareResponse<serde_json::Value> = serde_json::from_str(&text)
         .map_err(|e| format!("JSON parse error: {} | response: {}", e, text))?;
@@ -967,7 +1084,7 @@ async fn deploy_pages_zip(
     project_name: String,
     zip_path: String,
 ) -> Result<serde_json::Value, String> {
-    let token = get_current_token(&state)?;
+    let auth = get_current_auth(&state)?;
     let account = state
         .current_account
         .lock()
@@ -996,7 +1113,7 @@ async fn deploy_pages_zip(
 
     // 1. 获取上传 JWT
     let upload_token: PagesUploadTokenRust =
-        cf_get::<PagesUploadTokenRust>(&token, &format!("/accounts/{}/pages/projects/{}/upload-token", account_id, project_name))
+        cf_get::<PagesUploadTokenRust>(&auth, &format!("/accounts/{}/pages/projects/{}/upload-token", account_id, project_name))
             .await
             .map_err(|e| format!("获取上传令牌失败: {}", e))?
             .result
@@ -1060,7 +1177,7 @@ async fn deploy_pages_zip(
         .map_err(|e| format!("upsert-hashes 失败: {}", e))?;
 
     // 5. 创建部署
-    create_pages_deployment(&token, &account_id, &project_name, manifest).await
+    create_pages_deployment(&auth, &account_id, &project_name, manifest).await
         .map_err(|e| format!("创建部署失败: {}", e))
 }
 
@@ -1077,7 +1194,7 @@ async fn deploy_pages_wrangler(
     out_dir: Option<String>,
     extra_args: Option<String>,
 ) -> Result<String, String> {
-    let token = get_current_token(&state)?;
+    let auth = get_current_auth(&state)?;
     let account = state
         .current_account
         .lock()
@@ -1147,13 +1264,15 @@ async fn deploy_pages_wrangler(
         wrangler_args.push("2026-08-28".to_string());
     }
 
-    let output = tokio::process::Command::new("cmd")
+    let mut wrangler_cmd = tokio::process::Command::new("cmd");
+    wrangler_cmd
         .args(&["/C", "npx", "--yes"])
         .args(&wrangler_args)
         .current_dir(&project_path)
-        .env("CLOUDFLARE_API_TOKEN", &token)
-        .env("CLOUDFLARE_ACCOUNT_ID", &account_id)
-        .env("NO_COLOR", "1")
+        .env("CLOUDFLARE_ACCOUNT_ID", &account_id);
+    apply_wrangler_env(&mut wrangler_cmd, &auth);
+
+    let output = wrangler_cmd
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .output()
