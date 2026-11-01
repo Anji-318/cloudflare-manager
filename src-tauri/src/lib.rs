@@ -419,7 +419,7 @@ async fn save_account(
     account.token_encrypted = encrypt_token(&auth.secret)?;
 
     // Auto-fetch Cloudflare account ID if not provided
-    if account.account_id.is_none() || account.account_id.as_ref().unwrap().is_empty() {
+    if account.account_id.as_deref().unwrap_or("").is_empty() {
         let resp: CloudflareResponse<Vec<serde_json::Value>> = cf_get(&auth, "/accounts").await?;
         if let Some(accounts) = resp.result {
             if let Some(first) = accounts.first() {
@@ -428,7 +428,7 @@ async fn save_account(
                 }
             }
         }
-        if account.account_id.is_none() || account.account_id.as_ref().unwrap().is_empty() {
+        if account.account_id.as_deref().unwrap_or("").is_empty() {
             return Err(
                 "无法获取 Account ID。请确认凭据拥有“帐户 - 帐户（读取）”权限（Global API Key 默认拥有全部权限），并且 Account Resources 包含目标账户。"
                     .to_string(),
@@ -779,7 +779,7 @@ async fn deploy_pages_local(
     let account = state
         .current_account
         .lock()
-        .unwrap()
+        .map_err(|e| e.to_string())?
         .clone()
         .ok_or("未选择账户")?;
     let account_id = account.account_id.ok_or("当前账户缺少 Account ID")?;
@@ -941,8 +941,10 @@ fn normalize_pages_paths(files: Vec<(String, Vec<u8>)>) -> Vec<PagesDeployFileRu
         .collect();
 
     let strip = if first_segs.len() == 1 && cleaned.iter().all(|(n, _)| n.contains('/')) {
-        let top = first_segs.iter().next().unwrap().clone();
-        format!("{}/", top)
+        match first_segs.iter().next() {
+            Some(top) => format!("{}/", top),
+            None => String::new(),
+        }
     } else {
         String::new()
     };

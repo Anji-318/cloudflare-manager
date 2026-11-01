@@ -390,28 +390,64 @@
 
     // ========== 自定义背景与前景调节 ==========
     const BG_DEFAULTS = { image: '', blur: 0, brightness: 100, fgAlpha: 92, fgBrightness: 100 };
+    // 内存缓存：避免每次拖动滑块都重新 JSON.parse 几 MB 的 base64 图片
+    let bgCache = null;
+    let bgPersistTimer = null;
+    // 本地图片压缩参数：小于该体积直接使用，超过则统一走 canvas 压缩
+    const BG_IMAGE_KEEP_BYTES = 600 * 1024;
+    // 逐级降质，直到能塞进 localStorage（配额通常 5MB）
+    const BG_ENCODE_STEPS = [
+      { side: 1920, quality: 0.85 },
+      { side: 1600, quality: 0.72 },
+      { side: 1280, quality: 0.60 }
+    ];
 
     function loadBgSettings() {
+      if (bgCache) return { ...bgCache };
       try {
         const saved = JSON.parse(localStorage.getItem('bgSettings') || '{}');
-        return { ...BG_DEFAULTS, ...saved };
+        bgCache = { ...BG_DEFAULTS, ...saved };
       } catch (e) {
-        return { ...BG_DEFAULTS };
+        bgCache = { ...BG_DEFAULTS };
       }
+      return { ...bgCache };
     }
 
-    function saveBgSettings(s) {
+    // 静默落盘：返回是否成功（配额不足时为 false，不弹窗）
+    function tryPersistBg(s) {
       try {
         localStorage.setItem('bgSettings', JSON.stringify(s));
+        bgCache = { ...s };
         return true;
       } catch (e) {
-        alert('保存失败：图片过大超出本地存储上限，请换用更小的图片或改用 URL 方式');
         return false;
       }
     }
 
-    function applyBgSettings() {
-      const s = loadBgSettings();
+    function saveBgSettings(s) {
+      if (tryPersistBg(s)) return true;
+      alert('保存失败：图片过大超出本地存储上限，请换用更小的图片或改用 URL 方式');
+      return false;
+    }
+
+    // 拖动滑块时高频调用：只改内存 + 立即生效，200ms 后才写 localStorage
+    function scheduleBgPersist() {
+      if (bgPersistTimer) clearTimeout(bgPersistTimer);
+      bgPersistTimer = setTimeout(flushBgPersist, 200);
+    }
+
+    function flushBgPersist() {
+      if (bgPersistTimer) {
+        clearTimeout(bgPersistTimer);
+        bgPersistTimer = null;
+      }
+      if (bgCache) tryPersistBg(bgCache);
+    }
+    window.addEventListener('beforeunload', flushBgPersist);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) flushBgPersist(); });
+
+    function applyBgSettings(settings) {
+      const s = settings || loadBgSettings();
       const root = document.documentElement;
       root.style.setProperty('--bg-blur', (s.blur || 0) + 'px');
       root.style.setProperty('--bg-brightness', (s.brightness || 100) + '%');
@@ -443,8 +479,8 @@
       root.style.setProperty('--auto-svg-shadow', `drop-shadow(0 1px 3px rgba(${color}))`);
     }
 
-    function updateBgSettingLabels() {
-      const s = loadBgSettings();
+    function updateBgSettingLabels(settings) {
+      const s = settings || loadBgSettings();
       const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
       setText('bg-blur-val', (s.blur || 0) + 'px');
       setText('bg-brightness-val', (s.brightness || 100) + '%');
@@ -460,19 +496,60 @@
       setVal('bg-brightness-slider', s.brightness || 100);
       setVal('fg-alpha-slider', s.fgAlpha != null ? s.fgAlpha : 92);
       setVal('fg-brightness-slider', s.fgBrightness || 100);
-      updateBgSettingLabels();
+      updateBgSettingLabels(s);
     }
 
     function setBgSetting(key, value) {
       const s = loadBgSettings();
       s[key] = value;
-      if (!saveBgSettings(s)) return;
-      applyBgSettings();
-      updateBgSettingLabels();
+      bgCache = s;
+      applyBgSettings(s);
+      updateBgSettingLabels(s);
+      scheduleBgPersist();
     }
     window.setBgSetting = setBgSetting;
 
-    // 本地图片：过大时压缩到 1920px JPEG，避免超出 localStorage 上限
+    // 把图片按最长边缩放并转成 JPEG（JPEG 不支持透明，先铺应用底色）
+    function drawBgToDataUrl(img, maxSide, quality) {
+      const w = img.naturalWidth || img.width || 1;
+      const h = img.naturalHeight || img.height || 1;
+      const scale = Math.min(1, maxSide / Math.max(w, h));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(w * scale));
+      canvas.height = Math.max(1, Math.round(h * scale));
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#0F172A';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/jpeg', quality);
+    }
+
+    // 逐级降质写入，直到 localStorage 存得下
+    function commitBgImage(img) {
+      for (const step of BG_ENCODE_STEPS) {
+        const url = drawBgToDataUrl(img, step.side, step.quality);
+        const s = { ...loadBgSettings(), image: url };
+        if (tryPersistBg(s)) {
+          applyBgSettings(s);
+          updateBgSettingLabels(s);
+          const input = document.getElementById('bg-url-input');
+          if (input) input.value = '';
+          return true;
+        }
+      }
+      alert('图片过大，压缩到最小仍超出本地存储上限。请换一张更小的图片，或改用图片 URL。');
+      return false;
+    }
+
+    function commitBgImageUrl(dataUrl) {
+      const s = { ...loadBgSettings(), image: dataUrl };
+      if (!tryPersistBg(s)) return false;
+      applyBgSettings(s);
+      updateBgSettingLabels(s);
+      return true;
+    }
+
+    // 本地图片：小图直接用，大图统一压缩，避免超出 localStorage 配额
     function onBgFilePicked(input) {
       const file = input.files && input.files[0];
       if (!file) return;
@@ -480,21 +557,12 @@
       reader.onload = () => {
         const dataUrl = reader.result;
         input.value = '';
-        if (typeof dataUrl === 'string' && dataUrl.length > 3.5 * 1024 * 1024) {
-          const img = new Image();
-          img.onload = () => {
-            const scale = Math.min(1, 1920 / Math.max(img.width, img.height));
-            const canvas = document.createElement('canvas');
-            canvas.width = Math.max(1, Math.round(img.width * scale));
-            canvas.height = Math.max(1, Math.round(img.height * scale));
-            canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-            setBgSetting('image', canvas.toDataURL('image/jpeg', 0.85));
-          };
-          img.onerror = () => alert('图片解析失败，请换一张图片');
-          img.src = dataUrl;
-        } else {
-          setBgSetting('image', dataUrl);
-        }
+        if (typeof dataUrl !== 'string' || !dataUrl) { alert('读取图片失败'); return; }
+        if (dataUrl.length <= BG_IMAGE_KEEP_BYTES && commitBgImageUrl(dataUrl)) return;
+        const img = new Image();
+        img.onload = () => commitBgImage(img);
+        img.onerror = () => alert('图片解析失败，请换一张图片');
+        img.src = dataUrl;
       };
       reader.onerror = () => { input.value = ''; alert('读取图片失败'); };
       reader.readAsDataURL(file);
@@ -505,14 +573,20 @@
       const input = document.getElementById('bg-url-input');
       const url = input ? input.value.trim() : '';
       if (!url) { alert('请输入图片 URL'); return; }
-      setBgSetting('image', url);
+      if (!commitBgImageUrl(url)) {
+        alert('保存失败：图片过大超出本地存储上限，请换用更小的图片');
+      }
     }
     window.applyBgUrl = applyBgUrl;
 
     function clearBgImage() {
       const input = document.getElementById('bg-url-input');
       if (input) input.value = '';
-      setBgSetting('image', '');
+      const s = { ...loadBgSettings(), image: '' };
+      if (tryPersistBg(s)) {
+        applyBgSettings(s);
+        updateBgSettingLabels(s);
+      }
     }
     window.clearBgImage = clearBgImage;
 
@@ -524,6 +598,27 @@
       syncBgSettingsUI();
     }
     window.resetBgSettings = resetBgSettings;
+
+    // 清除所有本地数据：逐个删除账户（复用已有命令，不新增后端接口）+ 清空 localStorage
+    async function clearAllLocalData() {
+      if (!confirm('确定要清除所有本地数据吗？\n将删除全部账户、加密凭据、主题与背景设置，操作不可撤销。')) return;
+      if (!confirm('再次确认：清除后需要重新添加所有账户，是否继续？')) return;
+      try {
+        let accounts = [];
+        try { accounts = await callBackend('list_accounts') || []; } catch (e) { console.error(e); }
+        for (const acc of accounts) {
+          try { await callBackend('delete_account', { id: acc.id }); } catch (e) { console.error('删除账户失败:', acc.id, e); }
+        }
+        try { await callBackend('clear_current_account'); } catch (e) { console.error(e); }
+        try { localStorage.clear(); } catch (e) { console.error(e); }
+        bgCache = null;
+        alert('本地数据已清除，应用将重新加载');
+        location.reload();
+      } catch (e) {
+        alert('清除失败：' + e);
+      }
+    }
+    window.clearAllLocalData = clearAllLocalData;
 
     const AUTH_LABELS = {
       token: {

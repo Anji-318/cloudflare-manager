@@ -2,12 +2,6 @@
 
 基于 **Tauri v2 + Rust + WebView** 的 Windows 桌面应用，用于集中管理多个 Cloudflare 账户的域名、DNS、Workers、Pages、R2、KV、D1、Tunnels、防火墙、缓存与分析数据。
 
-## 项目路径
-
-```
-C:\Users\Giga\Desktop\cloudflare多账户管理系统
-```
-
 ## 技术栈
 
 - **后端**：Rust + Tauri v2
@@ -31,6 +25,7 @@ C:\Users\Giga\Desktop\cloudflare多账户管理系统
 - [x] Tunnels、Firewall、缓存清除、分析报表入口
 - [x] 深色/浅色主题切换
 - [x] 自定义背景：本地图片或图片 URL，支持背景模糊、背景明暗、前景透明度、前景明暗四项调节（设置页）
+- [x] 设置页支持一键清除所有本地数据（二次确认，删除账户与本地配置）
 
 ## 构建方式
 
@@ -100,7 +95,9 @@ cloudflare多账户管理系统/
 │   ├── app.js                    # 业务逻辑
 │   ├── index.html                # 主界面
 │   ├── usage.html                # 使用说明弹窗
-│   └── styles.css                # 自定义样式
+│   ├── input.css                 # Tailwind 源样式（修改后需 npm run build:css）
+│   ├── tailwind.css              # Tailwind 构建产物（勿手改）
+│   └── styles.css                # 使用说明页独立样式
 ├── src-tauri/                    # Tauri / Rust 后端
 │   ├── src/lib.rs                # 命令与 Cloudflare API 代理
 │   ├── Cargo.toml

@@ -911,31 +911,12 @@
             </div>
             <button onclick="resetBgSettings()" class="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm transition-colors">恢复默认</button>
           </div>
-          <div class="flex items-center justify-between pb-6 border-b border-slate-200 dark:border-slate-700/50">
-            <div>
-              <h3 class="font-medium">语言</h3>
-              <p class="text-sm text-slate-500">选择界面语言</p>
-            </div>
-            <select class="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm px-3 py-2 outline-none">
-              <option>简体中文</option>
-              <option>English</option>
-            </select>
-          </div>
-          <div class="flex items-center justify-between pb-6 border-b border-slate-200 dark:border-slate-700/50">
-            <div>
-              <h3 class="font-medium">启动时锁定</h3>
-              <p class="text-sm text-slate-500">每次启动应用需要输入主密码</p>
-            </div>
-            <button class="relative inline-flex h-6 w-11 items-center rounded-full bg-slate-300 dark:bg-slate-700 transition-colors">
-              <span class="translate-x-1 inline-block h-4 w-4 transform rounded-full bg-white transition-transform"></span>
-            </button>
-          </div>
           <div class="flex items-center justify-between">
             <div>
               <h3 class="font-medium text-red-400">清除所有数据</h3>
               <p class="text-sm text-slate-500">删除本地保存的所有账户和配置</p>
             </div>
-            <button class="px-4 py-2 rounded-lg border border-red-400 text-red-400 hover:bg-red-400/10 text-sm transition-colors">清除</button>
+            <button onclick="clearAllLocalData()" class="px-4 py-2 rounded-lg border border-red-400 text-red-400 hover:bg-red-400/10 text-sm transition-colors">清除</button>
           </div>
         </div>
       </div>

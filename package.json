@@ -2,7 +2,6 @@
   "name": "cloudflare-manager",
   "version": "0.3.6",
   "description": "Cloudflare 多账户管理系统",
-  "main": "index.js",
   "scripts": {
     "tauri": "tauri",
     "dev": "npm run build:css && tauri dev",
