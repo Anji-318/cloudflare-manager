@@ -129,7 +129,7 @@ Token 缺少“帐户 - 帐户（读取）”权限，或 Account Resources 未�
 构建完成后，建议同时保留：
 
 - 安装包：[cloudflare-manager_0.3.5_x64-setup.exe](https://github.com/Anji-318/cloudflare-manager/releases/download/v0.3.5/cloudflare-manager_0.3.5_x64-setup.exe)
-- 可执行文件：`cloudflare-manager.exe`
+- 可执行文件：[cloudflare-manager.exe](https://github.com/Anji-318/cloudflare-manager/releases/download/v0.3.5/cloudflare-manager.exe)
 
 ## 开源许可
 
